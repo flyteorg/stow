@@ -122,7 +122,7 @@ func (i *item) Metadata() (map[string]interface{}, error) {
 }
 
 func (i *item) ensureInfo() error {
-	if i.properties.Metadata == nil || i.properties.LastModified == nil {
+	if i.properties.Metadata == nil || i.properties.LastModified == nil || i.properties.ETag == nil {
 		i.infoOnce.Do(func() {
 			// Retrieve Item information
 			itemInfo, infoErr := i.getInfo()
@@ -145,8 +145,17 @@ func (i *item) ensureInfo() error {
 				return
 			}
 			i.properties.LastModified = &lmValue
+
+			etag, etagErr := itemInfo.ETag()
+			if etagErr != nil {
+				i.infoErr = etagErr
+				return
+			}
+
+			i.properties.ETag = &etag
 		})
 	}
+
 	return i.infoErr
 }
 
@@ -155,6 +164,7 @@ func (i *item) getInfo() (stow.Item, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return itemInfo, nil
 }
 
