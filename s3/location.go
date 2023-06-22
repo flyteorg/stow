@@ -2,14 +2,14 @@ package s3
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/flyteorg/stow"
 	"github.com/pkg/errors"
 )
@@ -18,7 +18,7 @@ import (
 type location struct {
 	config         stow.Config
 	customEndpoint string
-	client         *s3.S3
+	client         *s3.Client
 }
 
 // CreateContainer creates a new container, in this case an S3 bucket.
@@ -29,7 +29,7 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 		Bucket: aws.String(containerName), // required
 	}
 
-	_, err := l.client.CreateBucket(createBucketParams)
+	_, err := l.client.CreateBucket(context.TODO(), createBucketParams)
 	if err != nil {
 		return nil, errors.Wrap(err, "CreateContainer, creating the bucket")
 	}
@@ -57,7 +57,7 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
 	// Response returns exported Owner(*s3.Owner) and Bucket(*s3.[]Bucket)
 	var params *s3.ListBucketsInput
-	bucketList, err := l.client.ListBuckets(params)
+	bucketList, err := l.client.ListBuckets(context.TODO(), params)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "Containers, listing the buckets")
 	}
@@ -103,7 +103,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 		bucketRegion := region
 		if !endpointSet && endpoint == "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			bucketRegion, err = s3manager.GetBucketRegionWithClient(ctx, l.client, *bucket.Name)
+			bucketRegion, err = manager.GetBucketRegion(ctx, l.client, *bucket.Name)
 			cancel()
 			if err != nil {
 				if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
@@ -153,7 +153,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 	// does not support s3session.GetBucketRegion().
 	if endpoint, endpointSet := l.config.Config(ConfigEndpoint); !endpointSet && endpoint == "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		bucketRegion, _ = s3manager.GetBucketRegionWithClient(ctx, l.client, id)
+		bucketRegion, _ = manager.GetBucketRegion(ctx, l.client, id)
 		cancel()
 
 		var err error
@@ -178,7 +178,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 		Bucket: aws.String(id),
 	}
 
-	_, err := client.GetBucketLocation(params)
+	_, err := client.GetBucketLocation(context.TODO(), params)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NoSuchBucket" {
 			return nil, stow.ErrNotFound
@@ -196,7 +196,7 @@ func (l *location) RemoveContainer(id string) error {
 		Bucket: aws.String(id),
 	}
 
-	_, err := l.client.DeleteBucket(params)
+	_, err := l.client.DeleteBucket(context.TODO(), params)
 	if err != nil {
 		return errors.Wrap(err, "RemoveContainer, deleting the bucket")
 	}

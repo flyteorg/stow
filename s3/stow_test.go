@@ -95,14 +95,14 @@ func TestEtagCleanup(t *testing.T) {
 func TestPrepMetadataSuccess(t *testing.T) {
 	is := is.New(t)
 
-	m := make(map[string]*string)
-	m["one"] = aws.String("two")
-	m["3"] = aws.String("4")
-	m["ninety-nine"] = aws.String("100")
+	m := make(map[string]string)
+	m["one"] = "two"
+	m["3"] = "4"
+	m["ninety-nine"] = "100"
 
 	m2 := make(map[string]interface{})
 	for key, value := range m {
-		str := *value
+		str := value
 		m2[key] = str
 	}
 

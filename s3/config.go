@@ -1,16 +1,15 @@
 package s3
 
 import (
-	"net/http"
-	"net/url"
-	"time"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"context"
+	"fmt"
+	aws2 "github.com/aws/aws-sdk-go-v2/aws"
+	config2 "github.com/aws/aws-sdk-go-v2/config"
+	credentials2 "github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/flyteorg/stow"
 	"github.com/pkg/errors"
+	"net/url"
 )
 
 // Kind represents the name of the location/storage type.
@@ -122,8 +121,16 @@ func init() {
 	stow.Register(Kind, makefn, kindfn, validatefn)
 }
 
+type awsEndpointResolverAdaptor func(region string, options s3.EndpointResolverOptions) (aws2.Endpoint, error)
+
+func (a awsEndpointResolverAdaptor) ResolveEndpoint(service, region string) (aws2.Endpoint, error) {
+	return a(service, s3.EndpointResolverOptions{
+		ResolvedRegion: region,
+	})
+}
+
 // Attempts to create a session based on the information given.
-func newS3Client(config stow.Config, region string) (client *s3.S3, endpoint string, err error) {
+func newS3Client(config stow.Config, region string) (client *s3.Client, endpoint string, err error) {
 	authType, _ := config.Config(ConfigAuthType)
 	accessKeyID, _ := config.Config(ConfigAccessKeyID)
 	secretKey, _ := config.Config(ConfigSecretKey)
@@ -133,51 +140,89 @@ func newS3Client(config stow.Config, region string) (client *s3.S3, endpoint str
 		authType = authTypeAccessKey
 	}
 
-	awsConfig := aws.NewConfig().
-		WithHTTPClient(http.DefaultClient).
-		WithMaxRetries(aws.UseServiceDefaultRetries).
-		WithLogger(aws.NewDefaultLogger()).
-		WithLogLevel(aws.LogOff).
-		WithSleepDelay(time.Sleep)
+	ctx := context.Background()
+
+	awsCfg, err := config2.LoadDefaultConfig(ctx, func(options *config2.LoadOptions) error {
+		return nil
+	})
+
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load AWS config. Error: %w", err)
+	}
 
 	if region == "" {
 		region, _ = config.Config(ConfigRegion)
 	}
+
 	if region != "" {
-		awsConfig.WithRegion(region)
+		awsCfg.Region = region
 	} else {
-		awsConfig.WithRegion("us-east-1")
+		awsCfg.Region = "us-east-1"
 	}
 
 	if authType == authTypeAccessKey {
-		awsConfig.WithCredentials(credentials.NewStaticCredentials(accessKeyID, secretKey, ""))
+		awsCfg.Credentials = credentials2.NewStaticCredentialsProvider(accessKeyID, secretKey, "")
 	}
 
 	endpoint, ok := config.Config(ConfigEndpoint)
 	if ok {
-		awsConfig.WithEndpoint(endpoint).
-			WithS3ForcePathStyle(true)
+		awsCfg.EndpointResolver = awsEndpointResolverAdaptor(s3.EndpointResolverFromURL(endpoint).ResolveEndpoint)
 	}
 
 	disableSSL, ok := config.Config(ConfigDisableSSL)
 	if ok && disableSSL == "true" {
-		awsConfig.WithDisableSSL(true)
+		// TODO: Implement
 	}
 
-	sess, err := session.NewSession(awsConfig)
-	if err != nil {
-		return nil, "", err
-	}
-	if sess == nil {
-		return nil, "", errors.New("creating the S3 session")
-	}
-
-	s3Client := s3.New(sess)
-
-	usev2, ok := config.Config(ConfigV2Signing)
-	if ok && usev2 == "true" {
-		setv2Handlers(s3Client)
-	}
+	s3Client := s3.NewFromConfig(awsCfg)
+	// , func(options *s3.Options) {
+	//	options.UsePathStyle = true
+	//	options.APIOptions = append(options.APIOptions, func(stack *middleware.Stack) error {
+	//		stack := middleware.NewStack("", nil)
+	//
+	//		// Custom Build middleware
+	//		stack.Build.Add(
+	//			middleware.BuildMiddlewareFunc("",
+	//			func(ctx context.Context, input middleware.BuildInput, handler middleware.BuildHandler) (middleware.BuildOutput, middleware.Metadata, error) {
+	//			parsedURL, err := url.Parse(input.Request.URL.String())
+	//			if err != nil {
+	//				log.Fatal("Failed to parse URL", err)
+	//			}
+	//
+	//			input.Request.URL.Opaque = parsedURL.Path
+	//
+	//			return handler.HandleBuild(ctx, input)
+	//		},
+	//		), middleware.After)
+	//
+	//		// Use the built-in Sign middleware
+	//		stack.Sign.Add(middleware.SignRequestHandlerV4)
+	//
+	//		// Use the built-in ContentLength middleware
+	//		stack.Sign.AddRequestHandler(middleware.BuildContentLengthHandler)
+	//
+	//		stack.Build.Add(middleware.BuildMiddlewareFunc(), middleware.After)
+	//		corehandlers.UserAgentHandler)
+	//		svc.Handlers.Build.PushBack(func(r *request.Request) {
+	//			parsedURL, err := url.Parse(r.HTTPRequest.URL.String())
+	//			if err != nil {
+	//				log.Fatal("Failed to parse URL", err)
+	//			}
+	//			r.HTTPRequest.URL.Opaque = parsedURL.Path
+	//		})
+	//
+	//		svc.Handlers.Sign.Clear()
+	//		svc.Handlers.Sign.PushBack(Sign)
+	//		svc.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
+	//
+	//	})
+	//})
+	//
+	//s3Client.GetObject()
+	//usev2, ok := config.Config(ConfigV2Signing)
+	//if ok && usev2 == "true" {
+	//	setv2Handlers(s3Client)
+	//}
 
 	return s3Client, endpoint, nil
 }

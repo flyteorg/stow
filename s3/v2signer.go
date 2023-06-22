@@ -27,7 +27,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -35,10 +34,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/corehandlers"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 const (
@@ -84,19 +81,20 @@ var s3ParamsToSign = map[string]bool{
 	"delete":                       true,
 }
 
-func setv2Handlers(svc *s3.S3) {
-	svc.Handlers.Build.PushBack(func(r *request.Request) {
-		parsedURL, err := url.Parse(r.HTTPRequest.URL.String())
-		if err != nil {
-			log.Fatal("Failed to parse URL", err)
-		}
-		r.HTTPRequest.URL.Opaque = parsedURL.Path
-	})
-
-	svc.Handlers.Sign.Clear()
-	svc.Handlers.Sign.PushBack(Sign)
-	svc.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
-}
+//
+//func setv2Handlers(svc *s3.Client) {
+//	svc.Handlers.Build.PushBack(func(r *request.Request) {
+//		parsedURL, err := url.Parse(r.HTTPRequest.URL.String())
+//		if err != nil {
+//			log.Fatal("Failed to parse URL", err)
+//		}
+//		r.HTTPRequest.URL.Opaque = parsedURL.Path
+//	})
+//
+//	svc.Handlers.Sign.Clear()
+//	svc.Handlers.Sign.PushBack(Sign)
+//	svc.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
+//}
 
 // Sign requests with signature version 2.
 //
