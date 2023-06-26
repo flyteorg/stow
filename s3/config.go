@@ -51,74 +51,74 @@ const (
 	ConfigV2Signing = "v2_signing"
 )
 
+func ValidateFunc(config stow.Config) error {
+	authType, ok := config.Config(ConfigAuthType)
+	if !ok || authType == "" {
+		authType = authTypeAccessKey
+	}
+
+	if !(authType == authTypeAccessKey || authType == authTypeIAM) {
+		return errors.New("invalid auth_type")
+	}
+
+	if authType == authTypeAccessKey {
+		_, ok := config.Config(ConfigAccessKeyID)
+		if !ok {
+			return errors.New("missing Access Key ID")
+		}
+
+		_, ok = config.Config(ConfigSecretKey)
+		if !ok {
+			return errors.New("missing Secret Key")
+		}
+	}
+	return nil
+}
+
+func MakeFunc(config stow.Config) (stow.Location, error) {
+	authType, ok := config.Config(ConfigAuthType)
+	if !ok || authType == "" {
+		authType = authTypeAccessKey
+	}
+
+	if !(authType == authTypeAccessKey || authType == authTypeIAM) {
+		return nil, errors.New("invalid auth_type")
+	}
+
+	if authType == authTypeAccessKey {
+		_, ok := config.Config(ConfigAccessKeyID)
+		if !ok {
+			return nil, errors.New("missing Access Key ID")
+		}
+
+		_, ok = config.Config(ConfigSecretKey)
+		if !ok {
+			return nil, errors.New("missing Secret Key")
+		}
+	}
+
+	// Create a new client (s3 session)
+	client, endpoint, err := newS3Client(config, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a location with given config and client (s3 session).
+	loc := &location{
+		config:         config,
+		client:         client,
+		customEndpoint: endpoint,
+	}
+
+	return loc, nil
+}
+
 func init() {
-	validatefn := func(config stow.Config) error {
-		authType, ok := config.Config(ConfigAuthType)
-		if !ok || authType == "" {
-			authType = authTypeAccessKey
-		}
-
-		if !(authType == authTypeAccessKey || authType == authTypeIAM) {
-			return errors.New("invalid auth_type")
-		}
-
-		if authType == authTypeAccessKey {
-			_, ok := config.Config(ConfigAccessKeyID)
-			if !ok {
-				return errors.New("missing Access Key ID")
-			}
-
-			_, ok = config.Config(ConfigSecretKey)
-			if !ok {
-				return errors.New("missing Secret Key")
-			}
-		}
-		return nil
-	}
-	makefn := func(config stow.Config) (stow.Location, error) {
-
-		authType, ok := config.Config(ConfigAuthType)
-		if !ok || authType == "" {
-			authType = authTypeAccessKey
-		}
-
-		if !(authType == authTypeAccessKey || authType == authTypeIAM) {
-			return nil, errors.New("invalid auth_type")
-		}
-
-		if authType == authTypeAccessKey {
-			_, ok := config.Config(ConfigAccessKeyID)
-			if !ok {
-				return nil, errors.New("missing Access Key ID")
-			}
-
-			_, ok = config.Config(ConfigSecretKey)
-			if !ok {
-				return nil, errors.New("missing Secret Key")
-			}
-		}
-
-		// Create a new client (s3 session)
-		client, endpoint, err := newS3Client(config, "")
-		if err != nil {
-			return nil, err
-		}
-
-		// Create a location with given config and client (s3 session).
-		loc := &location{
-			config:         config,
-			client:         client,
-			customEndpoint: endpoint,
-		}
-
-		return loc, nil
-	}
-
 	kindfn := func(u *url.URL) bool {
 		return u.Scheme == Kind
 	}
 
-	stow.Register(Kind, makefn, kindfn, validatefn)
+	stow.Register(Kind, MakeFunc, kindfn, ValidateFunc)
 }
 
 type awsEndpointResolverAdaptor func(region string, options s3.EndpointResolverOptions) (aws2.Endpoint, error)
