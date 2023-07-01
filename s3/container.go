@@ -216,7 +216,7 @@ func (c *container) getItem(id string) (*item, error) {
 	if err != nil {
 		// stow needs ErrNotFound to pass the test but amazon returns an opaque error
 		awsHttpErr := &awshttp.ResponseError{}
-		ok := errors.As(err, awsHttpErr)
+		ok := errors.As(err, &awsHttpErr)
 		if ok && awsHttpErr.HTTPResponse().StatusCode == http.StatusNotFound {
 			return nil, stow.ErrNotFound
 		}
