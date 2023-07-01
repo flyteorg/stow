@@ -7,11 +7,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"io"
+	"net/http"
 	"strings"
 
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/flyteorg/stow"
 	"github.com/pkg/errors"
 )
@@ -214,7 +215,7 @@ func (c *container) getItem(id string) (*item, error) {
 	res, err := c.client.HeadObject(context.TODO(), params)
 	if err != nil {
 		// stow needs ErrNotFound to pass the test but amazon returns an opaque error
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+		if aerr, ok := errors.Unwrap(err).(*awshttp.ResponseError); ok && aerr.HTTPResponse().StatusCode == http.StatusNotFound {
 			return nil, stow.ErrNotFound
 		}
 		return nil, errors.Wrap(err, "getItem, getting the object")
