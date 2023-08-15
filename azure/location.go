@@ -31,7 +31,8 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 		}
 		return nil, err
 	}
-	baseUrl, _ := l.config.Config(ConfigBaseUrl)
+	baseUrl := GetBaseAzureUrlOrDefault(l.config)
+
 	container := &container{
 		id: name,
 		properties: az.ContainerProperties{

@@ -99,10 +99,8 @@ func getAccount(cfg stow.Config) (account, key string, baseUrl string, APIVersio
 		return "", "", "", "", false, errors.New("missing auth key")
 	}
 
-	baseUrl, ok = cfg.Config(ConfigBaseUrl)
-	if !ok {
-		baseUrl = defaultBaseUrl
-	}
+	baseUrl = GetBaseAzureUrlOrDefault(cfg)
+
 	APIVersion, ok = cfg.Config(ConfigAPIVersion)
 	if !ok {
 		APIVersion = defaultAPIVersion
@@ -118,6 +116,14 @@ func getAccount(cfg stow.Config) (account, key string, baseUrl string, APIVersio
 		return "", "", "", "", false, errors.New("invalid value for use_https_str")
 	}
 	return acc, key, baseUrl, APIVersion, useHTTPS, nil
+}
+
+func GetBaseAzureUrlOrDefault(cfg stow.Config) string {
+	baseUrl, ok := cfg.Config(ConfigBaseUrl)
+	if !ok {
+		baseUrl = defaultBaseUrl
+	}
+	return baseUrl
 }
 
 func newBlobStorageClient(account, key string, baseUrl string, APIVersion string, useHTTPS bool) (*az.BlobStorageClient, error) {
