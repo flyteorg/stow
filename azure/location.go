@@ -31,12 +31,14 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 		}
 		return nil, err
 	}
+	baseUrl, _ := l.config.Config(ConfigBaseUrl)
 	container := &container{
 		id: name,
 		properties: az.ContainerProperties{
 			LastModified: time.Now().Format(timeFormat),
 		},
-		client: l.client,
+		client:  l.client,
+		baseUrl: baseUrl,
 	}
 	time.Sleep(time.Second * 3)
 	return container, nil
