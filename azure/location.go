@@ -59,12 +59,14 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 	}
 	containers := make([]stow.Container, len(response.Containers))
 	for i, azureContainer := range response.Containers {
+		baseUrl := GetBaseAzureUrlOrDefault(l.config)
 		containers[i] = &container{
 			id:         azureContainer.Name,
 			properties: azureContainer.Properties,
 			client:     l.client,
 			creds:      l.sharedCreds,
 			account:    l.account,
+			baseUrl:    baseUrl,
 		}
 	}
 	return containers, response.NextMarker, nil

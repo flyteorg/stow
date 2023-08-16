@@ -120,7 +120,7 @@ func getAccount(cfg stow.Config) (account, key string, baseUrl string, APIVersio
 
 func GetBaseAzureUrlOrDefault(cfg stow.Config) string {
 	baseUrl, ok := cfg.Config(ConfigBaseUrl)
-	if !ok {
+	if !ok || baseUrl == "" {
 		baseUrl = defaultBaseUrl
 	}
 	return baseUrl
