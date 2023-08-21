@@ -99,7 +99,7 @@ func getAccount(cfg stow.Config) (account, key string, baseUrl string, APIVersio
 		return "", "", "", "", false, errors.New("missing auth key")
 	}
 
-	baseUrl = GetBaseAzureUrlOrDefault(cfg)
+	baseUrl = getBaseAzureUrlOrDefault(cfg)
 
 	APIVersion, ok = cfg.Config(ConfigAPIVersion)
 	if !ok {
@@ -118,7 +118,7 @@ func getAccount(cfg stow.Config) (account, key string, baseUrl string, APIVersio
 	return acc, key, baseUrl, APIVersion, useHTTPS, nil
 }
 
-func GetBaseAzureUrlOrDefault(cfg stow.Config) string {
+func getBaseAzureUrlOrDefault(cfg stow.Config) string {
 	baseUrl, ok := cfg.Config(ConfigBaseUrl)
 	if !ok || baseUrl == "" {
 		baseUrl = defaultBaseUrl
