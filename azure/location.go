@@ -31,7 +31,7 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 		}
 		return nil, err
 	}
-	baseUrl := getBaseAzureUrlOrDefault(l.config)
+	baseUrl := GetBaseAzureUrlOrDefault(l.config)
 
 	container := &container{
 		id: name,
@@ -59,7 +59,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 	}
 	containers := make([]stow.Container, len(response.Containers))
 	for i, azureContainer := range response.Containers {
-		baseUrl := getBaseAzureUrlOrDefault(l.config)
+		baseUrl := GetBaseAzureUrlOrDefault(l.config)
 		containers[i] = &container{
 			id:         azureContainer.Name,
 			properties: azureContainer.Properties,
