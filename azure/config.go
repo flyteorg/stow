@@ -48,11 +48,11 @@ func init() {
 		}
 		var uploadConcurrency int
 		var err error
-		uploadConccurencyStr, ok := config.Config(ConfigUploadConcurrency)
-		if !ok || uploadConccurencyStr == "" {
+		uploadConcurrencyStr, ok := config.Config(ConfigUploadConcurrency)
+		if !ok || uploadConcurrencyStr == "" {
 			uploadConcurrency = defaultUploadConcurrency
 		} else {
-			uploadConcurrency, err = strconv.Atoi(uploadConccurencyStr)
+			uploadConcurrency, err = strconv.Atoi(uploadConcurrencyStr)
 			if err != nil {
 				return nil, errors.New("invalid upload concurrency")
 			}

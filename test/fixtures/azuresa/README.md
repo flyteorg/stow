@@ -23,7 +23,7 @@ to the resource group to both create resources and assign roles. This is commonl
 #### Set up
 
 ```shell
-export RG_NAME="YOUR_RG_NAME"
+export AZ_RG_NAME="YOUR_RG_NAME"
 terragrunt apply
 ```
 
