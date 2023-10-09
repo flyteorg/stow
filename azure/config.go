@@ -49,7 +49,7 @@ func init() {
 		var uploadConcurrency int
 		var err error
 		uploadConcurrencyStr, ok := config.Config(ConfigUploadConcurrency)
-		if !ok || uploadConcurrencyStr == "" {
+		if !ok || len(uploadConcurrencyStr) == 0 {
 			uploadConcurrency = defaultUploadConcurrency
 		} else {
 			uploadConcurrency, err = strconv.Atoi(uploadConcurrencyStr)
