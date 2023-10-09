@@ -54,7 +54,7 @@ func init() {
 		} else {
 			uploadConcurrency, err = strconv.Atoi(uploadConcurrencyStr)
 			if err != nil {
-				return nil, errors.New("invalid upload concurrency")
+				return nil, fmt.Errorf("invalid upload concurrency [%v]", uploadConcurrency)
 			}
 		}
 		l := &location{
