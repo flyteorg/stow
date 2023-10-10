@@ -53,8 +53,8 @@ func (c *container) PreSignRequest(ctx context.Context, method stow.ClientMethod
 
 	sasQueryParams, err := c.preSigner(ctx, sas.BlobSignatureValues{
 		Protocol:      sas.ProtocolHTTPS,
-		StartTime:     time.Now().UTC().Add(time.Minute * -5),
-		ExpiryTime:    time.Now().UTC().Add(params.ExpiresIn),
+		StartTime:     time.Now().UTC().Add(-1 * clockSkewBuffer),
+		ExpiryTime:    time.Now().UTC().Add(params.ExpiresIn + clockSkewBuffer),
 		ContainerName: containerName,
 		BlobName:      blobName,
 		Permissions:   permissions.String(),
@@ -92,9 +92,9 @@ func (c *container) Item(id string) (stow.Item, error) {
 	// Another reasonable alternative would be to just lower case all metadata keys, as is
 	// the case with s3: https://github.com/aws/aws-sdk-go/issues/445
 	//
-
+	//ctx := context.Background()
 	//blobClient := c.client.NewBlobClient(id)
-	//resp, err := blobClient.GetProperties(context.Background(), nil)
+	//resp, err := blobClient.GetProperties(ctx, nil)
 	//if err != nil {
 	//	if strings.Contains(err.Error(), "404") {
 	//		return nil, stow.ErrNotFound
@@ -117,6 +117,7 @@ func (c *container) Item(id string) (stow.Item, error) {
 }
 
 func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string, error) {
+	ctx := context.Background()
 	options := azcontainer.ListBlobsFlatOptions{
 		Prefix:     &prefix,
 		MaxResults: to.Ptr(int32(count)),
@@ -126,7 +127,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 		options.Marker = &cursor
 	}
 
-	listResp, err := c.client.NewListBlobsFlatPager(&options).NextPage(context.Background())
+	listResp, err := c.client.NewListBlobsFlatPager(&options).NextPage(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -148,6 +149,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 }
 
 func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+	ctx := context.Background()
 	mdParsed, err := makeAzureCompatMetadataMap(metadata)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create or update Item, preparing metadata")
@@ -158,7 +160,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	var blobProps = &BlobProps{ContentLength: size}
 	f, match := r.(*os.File)
 	if match {
-		resp, err := blockClient.UploadFile(context.Background(), f, &blockblob.UploadFileOptions{
+		resp, err := blockClient.UploadFile(ctx, f, &blockblob.UploadFileOptions{
 			Concurrency: uint16(c.uploadConcurrency),
 			Metadata:    mdParsed,
 		})
@@ -168,7 +170,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 		blobProps.ETag = *resp.ETag
 		blobProps.LastModified = *resp.LastModified
 	} else {
-		resp, err := blockClient.UploadStream(context.Background(), r, &blockblob.UploadStreamOptions{
+		resp, err := blockClient.UploadStream(ctx, r, &blockblob.UploadStreamOptions{
 			Concurrency: c.uploadConcurrency,
 			Metadata:    mdParsed,
 		})
@@ -190,17 +192,19 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 }
 
 func (c *container) SetItemMetadata(itemName string, md map[string]string) error {
+	ctx := context.Background()
 	azCompatMap := make(map[string]*string, len(md))
 	for k, v := range md {
 		azCompatMap[k] = &v
 	}
 	_, err := c.client.NewBlobClient(itemName).SetMetadata(
-		context.Background(), azCompatMap, nil)
+		ctx, azCompatMap, nil)
 	return err
 }
 
 func (c *container) RemoveItem(id string) error {
-	_, err := c.client.NewBlobClient(id).Delete(context.Background(), nil)
+	ctx := context.Background()
+	_, err := c.client.NewBlobClient(id).Delete(ctx, nil)
 	return err
 }
 

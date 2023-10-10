@@ -501,10 +501,9 @@ func checkMetadata(t *testing.T, is is.I, item stow.Item, md map[string]interfac
 		is.Failf("error retrieving item metadata: %v", err)
 	}
 
-	t.Logf("Item metadata: %v", itemMD)
-	t.Logf("Expected item metadata: %v", md)
-
 	if !reflect.DeepEqual(itemMD, md) {
+		t.Logf("Item metadata: %v", itemMD)
+		t.Logf("Expected item metadata: %v", md)
 		return errors.New("metadata mismatch")
 	}
 	return nil

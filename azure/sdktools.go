@@ -34,7 +34,14 @@ func NewSharedKeyRequestPreSigner(accountName, key string) (RequestPreSigner, er
 	}, nil
 }
 
-var delegateKeyBufferDuration = time.Minute - 20
+// Azure recommends a 15 minute buffer for SAS tokens (and most tokens) in order to account
+// for clock skew between their systems and clients. From their docs...
+//
+// > remember that you may observe up to 15 minutes of clock skew in either direction
+// > on any request
+//
+// https://learn.microsoft.com/en-us/azure/storage/common/storage-sas-overview
+var clockSkewBuffer = time.Minute * 15
 
 // NewDelegatedKeyPreSigner will create a RequestPreSigner that worked with delegated
 // credentials, necessary when identity-based authentication (AD auth) is the used with
@@ -43,8 +50,8 @@ func NewDelegatedKeyPreSigner(serviceClient *service.Client) (RequestPreSigner, 
 	return func(ctx context.Context, values sas.BlobSignatureValues) (sas.QueryParameters, error) {
 		// Create the delegate key with a time buffer, since the blob key's lifetime
 		// must fit within the delegate key's lifetime.
-		delegateCredsStartTime := values.StartTime.UTC().Add(-1 * delegateKeyBufferDuration)
-		delegateCredsEndTime := values.ExpiryTime.UTC().Add(delegateKeyBufferDuration)
+		delegateCredsStartTime := values.StartTime.UTC().Add(-1 * clockSkewBuffer)
+		delegateCredsEndTime := values.ExpiryTime.UTC().Add(clockSkewBuffer)
 
 		udc, err := serviceClient.GetUserDelegationCredential(
 			ctx,

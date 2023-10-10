@@ -46,7 +46,8 @@ func (i *item) Size() (int64, error) {
 }
 
 func (i *item) Open() (io.ReadCloser, error) {
-	dlResp, err := i.client.DownloadStream(context.Background(), nil)
+	ctx := context.Background()
+	dlResp, err := i.client.DownloadStream(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,8 @@ func (i *item) Metadata() (map[string]interface{}, error) {
 // OpenRange opens the item for reading starting at byte start and ending
 // at byte end.
 func (i *item) OpenRange(start, end uint64) (io.ReadCloser, error) {
-	resp, err := i.client.DownloadStream(context.Background(), &blob.DownloadStreamOptions{
+	ctx := context.Background()
+	resp, err := i.client.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		Range: blob.HTTPRange{
 			Offset: int64(start),
 			Count:  int64(end) - int64(start) + 1,

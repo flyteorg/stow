@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cheekybits/is"
@@ -124,4 +125,19 @@ func TestMakeAzureCompatMetadataMapFailureWithNonStringValues(t *testing.T) {
 
 	_, err := makeAzureCompatMetadataMap(m)
 	is.Err(err)
+}
+
+func TestRemovedConfigOptionsCausesFailure(t *testing.T) {
+	is := is.New(t)
+	for _, removedKey := range removedConfigKeys {
+		cfg := stow.ConfigMap{"account": "ignore"}
+		cfg[removedKey] = "anything"
+		err := stow.Validate("azure", cfg)
+		is.Err(err)
+		if !strings.Contains(err.Error(), "removed config option used") ||
+			!strings.Contains(err.Error(), removedKey) {
+			is.Failf("Unexpected error message: %s", err.Error())
+		}
+
+	}
 }

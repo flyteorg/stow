@@ -27,8 +27,9 @@ func (l *location) Close() error {
 var publicAccessTypeContainer = azcontainer.PublicAccessTypeContainer
 
 func (l *location) CreateContainer(name string) (stow.Container, error) {
+	ctx := context.Background()
 	resp, err := l.client.CreateContainer(
-		context.Background(),
+		ctx,
 		name,
 		&azblob.CreateContainerOptions{Access: &publicAccessTypeContainer})
 
@@ -57,6 +58,7 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 }
 
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
+	ctx := context.Background()
 	params := azblob.ListContainersOptions{
 		MaxResults: to.Ptr(int32(count)),
 		Prefix:     &prefix,
@@ -66,7 +68,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 	}
 
 	pager := l.client.NewListContainersPager(&params)
-	resp, err := pager.NextPage(context.Background())
+	resp, err := pager.NextPage(ctx)
 	if err != nil {
 		return nil, cursor, err
 	}
@@ -133,7 +135,7 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 }
 
 func (l *location) RemoveContainer(id string) error {
-	_, err := l.client.DeleteContainer(
-		context.Background(), id, &azblob.DeleteContainerOptions{})
+	ctx := context.Background()
+	_, err := l.client.DeleteContainer(ctx, id, &azblob.DeleteContainerOptions{})
 	return err
 }

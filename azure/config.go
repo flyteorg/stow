@@ -24,6 +24,14 @@ const (
 	ConfigBaseUrlDepreciated = "base_url"
 )
 
+// Removed configuration values, will cause failures if used.
+const (
+	ConfigUseHttpsRemoved   = "use_https"
+	ConfigApiVersionRemoved = "api_version"
+)
+
+var removedConfigKeys = []string{ConfigUseHttpsRemoved, ConfigApiVersionRemoved}
+
 // Kind is the kind of Location this package provides.
 const Kind = "azure"
 
@@ -39,6 +47,12 @@ func init() {
 		if !ok {
 			return errors.New("missing account id")
 		}
+		for _, removedConfigKey := range removedConfigKeys {
+			_, ok = config.Config(removedConfigKey)
+			if ok {
+				return fmt.Errorf("removed config option used [%s]", removedConfigKey)
+			}
+		}
 		return nil
 	}
 	makefn := func(config stow.Config) (stow.Location, error) {
@@ -46,6 +60,7 @@ func init() {
 		if !ok {
 			return nil, errors.New("missing account id")
 		}
+
 		var uploadConcurrency int
 		var err error
 		uploadConcurrencyStr, ok := config.Config(ConfigUploadConcurrency)
