@@ -38,6 +38,7 @@ func TestStowWithSharedKeyAuth(t *testing.T) {
 	cfg := stow.ConfigMap{"account": azureaccount, "key": azurekey}
 	test.All(t, "azure", cfg)
 	test.ContainerPreSignRequest(t, "azure", cfg, presignedRequestPreparer)
+	test.ExistingContainerDoesNotProduceAnError(t, "azure", cfg)
 }
 
 func TestStowWithDefaultADAuth(t *testing.T) {
@@ -48,6 +49,7 @@ func TestStowWithDefaultADAuth(t *testing.T) {
 	cfg := stow.ConfigMap{"account": azureaccount}
 	test.All(t, "azure", cfg)
 	test.ContainerPreSignRequest(t, "azure", cfg, presignedRequestPreparer)
+	test.ExistingContainerDoesNotProduceAnError(t, "azure", cfg)
 }
 
 func TestBigFileUpload(t *testing.T) {

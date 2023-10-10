@@ -370,6 +370,16 @@ func BigFileUpload(t *testing.T, kind string, config stow.Config, fileSize int64
 	is.Equal(fileSize, itemSize)
 }
 
+func ExistingContainerDoesNotProduceAnError(t *testing.T, kind string, config stow.Config) {
+	is, location := initTest(t, kind, config)
+	testContainer, err := location.CreateContainer("stowtest-" + randName(10))
+	is.NoErr(err)
+	defer func() { location.RemoveContainer(testContainer.Name()) }()
+	dupAttempt, err := location.CreateContainer(testContainer.Name())
+	is.NoErr(err)
+	is.Equal(testContainer.Name(), dupAttempt.Name())
+}
+
 func initTest(t *testing.T, kind string, config stow.Config) (is.I, stow.Location) {
 	is := is.New(t)
 

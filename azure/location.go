@@ -3,7 +3,10 @@ package azure
 import (
 	"context"
 	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"net/http"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	azcontainer "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
@@ -26,6 +29,8 @@ func (l *location) Close() error {
 
 var publicAccessTypeContainer = azcontainer.PublicAccessTypeContainer
 
+// CreateContainer follows the contract from stow.Location, with one notable opinion.
+// Attempts to create an already-existing container will not produce an error.
 func (l *location) CreateContainer(name string) (stow.Container, error) {
 	ctx := context.Background()
 	resp, err := l.client.CreateContainer(
@@ -34,7 +39,13 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 		&azblob.CreateContainerOptions{Access: &publicAccessTypeContainer})
 
 	if err != nil {
-		if strings.Contains(err.Error(), "ErrorCode=ContainerAlreadyExists") {
+		var tErr *azcore.ResponseError
+		ok := errors.As(err, &tErr)
+		// Note: StatusConflict (409) is used for both "already exists"
+		// and "deleting" failures.
+		if ok &&
+			tErr.StatusCode == http.StatusConflict &&
+			tErr.ErrorCode == "ContainerAlreadyExists" {
 			return l.Container(name)
 		}
 		return nil, err
