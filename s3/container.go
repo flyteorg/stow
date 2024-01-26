@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -43,11 +44,26 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			contentMD5 = aws.String(params.ContentMD5)
 		}
 
-		req, _ = c.client.PutObjectRequest(&s3.PutObjectInput{
+		// getKMSMasterKeyID(c.client, c.name)
+		params := &s3.PutObjectInput{
 			Bucket:     aws.String(c.name),
 			Key:        aws.String(id),
 			ContentMD5: contentMD5,
-		})
+		}
+
+		if bucketEncrypted, sseAlgortihm, encryptionKey := getKMSMasterKeyID(c.client, c.name); bucketEncrypted {
+			switch sseAlgortihm {
+			case s3.ServerSideEncryptionAes256:
+				params.ServerSideEncryption = aws.String(sseAlgortihm)
+			case s3.ServerSideEncryptionAwsKms:
+				params.ServerSideEncryption = aws.String(sseAlgortihm)
+				if encryptionKey != "" {
+					params.SSEKMSKeyId = aws.String(encryptionKey)
+				}
+			}
+		}
+
+		req, _ = c.client.PutObjectRequest(params)
 	default:
 		return "", fmt.Errorf("unsupported client method [%v]", clientMethod.String())
 	}
@@ -300,4 +316,37 @@ func parseMetadata(md map[string]*string) (map[string]interface{}, error) {
 		m[k] = *value
 	}
 	return m, nil
+}
+
+func getKMSMasterKeyID(svc *s3.S3, bucketName string) (bucketEncrypted bool, sseAlgortihm string, encryptionKey string) {
+	input := &s3.GetBucketEncryptionInput{
+		Bucket: aws.String(bucketName),
+	}
+
+	output, err := svc.GetBucketEncryption(input)
+	if err != nil {
+		log.Printf("Bucket is not encrypted: %s", err.Error())
+		return false, "", ""
+	}
+
+	bucketEncryption := *output.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault
+	switch bucketEncryptionType := *bucketEncryption.SSEAlgorithm; bucketEncryptionType {
+
+	case s3.ServerSideEncryptionAwsKms:
+		// If bucket is KMS encrypted
+		log.Printf("Bucket %v has been encrypted with KMS", bucketName)
+		if bucketEncryption.KMSMasterKeyID != nil {
+			return true, s3.ServerSideEncryptionAwsKms, *bucketEncryption.KMSMasterKeyID
+		} else {
+			return true, s3.ServerSideEncryptionAwsKms, ""
+		}
+
+	case s3.ServerSideEncryptionAes256:
+		// If bucket is Aes256 encrypted
+		log.Printf("Bucket %v has been encrypted with AES256", bucketName)
+		return true, s3.ServerSideEncryptionAes256, ""
+	default:
+		log.Printf("fin Bucket is not encrypted")
+		return false, "", ""
+	}
 }
