@@ -44,7 +44,6 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			contentMD5 = aws.String(params.ContentMD5)
 		}
 
-		// getKMSMasterKeyID(c.client, c.name)
 		params := &s3.PutObjectInput{
 			Bucket:     aws.String(c.name),
 			Key:        aws.String(id),
