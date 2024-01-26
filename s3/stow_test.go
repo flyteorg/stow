@@ -42,40 +42,10 @@ func TestStow(t *testing.T) {
 }
 
 func TestPreSignedURL(t *testing.T) {
-	fileData := make(map[string]string)
-	content, err := os.ReadFile(os.Getenv("AWSCREDENTIALSLOCATION"))
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
-	}
-	lines := strings.Split(string(content), "\n")
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			continue
-		}
-
-		parts := strings.Split(line, "=")
-		if len(parts) != 2 {
-			fmt.Println("Invalid line:", line)
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		fileData[key] = value
-	}
-
-	accessKeyId := fileData["aws_access_key_id"]
-	secretKey := fileData["aws_secret_access_key"]
-	region := "us-west-2"
-
 	is := is.New(t)
-	// accessKeyId := os.Getenv("S3ACCESSKEYID")
-	// secretKey := os.Getenv("S3SECRETKEY")
-	// region := os.Getenv("S3REGION")
+	accessKeyId := os.Getenv("S3ACCESSKEYID")
+	secretKey := os.Getenv("S3SECRETKEY")
+	region := os.Getenv("S3REGION")
 
 	if accessKeyId == "" || secretKey == "" || region == "" {
 		t.Skip("skipping test because missing one or more of S3ACCESSKEYID S3SECRETKEY S3REGION")
@@ -90,7 +60,7 @@ func TestPreSignedURL(t *testing.T) {
 	location, err := stow.Dial("s3", config)
 	is.NoErr(err)
 
-	container, err := location.Container(os.Getenv("AWSS3BUCKET"))
+	container, err := location.Container("flyte-demo")
 	if err != nil {
 		t.Skip(err)
 	}

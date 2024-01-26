@@ -346,7 +346,7 @@ func getKMSMasterKeyID(svc *s3.S3, bucketName string) (bucketEncrypted bool, sse
 		log.Printf("Bucket %v has been encrypted with AES256", bucketName)
 		return true, s3.ServerSideEncryptionAes256, ""
 	default:
-		log.Printf("fin Bucket is not encrypted")
+		log.Printf("Bucket is not encrypted")
 		return false, "", ""
 	}
 }
