@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +27,12 @@ type container struct {
 	// region describes the AWS Availability Zone of the S3 Bucket.
 	region         string
 	customEndpoint string
+	extraArgs      string
+}
+
+type S3ExtraArgs struct {
+	ServerSideEncryption string
+	SSEKMSKeyId          string
 }
 
 func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.ClientMethod, id string,
@@ -50,19 +57,43 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			ContentMD5: contentMD5,
 		}
 
-		if bucketEncrypted, sseAlgortihm, encryptionKey := getKMSMasterKeyID(c.client, c.name); bucketEncrypted {
-			switch sseAlgortihm {
-			case s3.ServerSideEncryptionAes256:
-				params.ServerSideEncryption = aws.String(sseAlgortihm)
-			case s3.ServerSideEncryptionAwsKms:
-				params.ServerSideEncryption = aws.String(sseAlgortihm)
-				if encryptionKey != "" {
-					params.SSEKMSKeyId = aws.String(encryptionKey)
-				}
+		// First, try to set SSE using stow.config
+		var extraArgs S3ExtraArgs
+		json.Unmarshal([]byte(c.extraArgs), &extraArgs)
+
+		if extraArgs.ServerSideEncryption == "" {
+			// As backup, try to set SSE using s3.GetBucketEncryption
+			if bucketEncrypted, sseAlgortihm, encryptionKey := getKmsMasterKeyId(c.client, c.name); bucketEncrypted {
+				extraArgs.ServerSideEncryption, extraArgs.SSEKMSKeyId = sseAlgortihm, encryptionKey
+			}
+		}
+
+		// SSE info goes in headers, so that a valid signature is generated
+		switch extraArgs.ServerSideEncryption {
+		case s3.ServerSideEncryptionAes256:
+			params.ServerSideEncryption = aws.String(extraArgs.ServerSideEncryption)
+		case s3.ServerSideEncryptionAwsKms:
+			params.ServerSideEncryption = aws.String(extraArgs.ServerSideEncryption)
+			if extraArgs.SSEKMSKeyId != "" {
+				params.SSEKMSKeyId = aws.String(extraArgs.SSEKMSKeyId)
 			}
 		}
 
 		req, _ = c.client.PutObjectRequest(params)
+		q := req.HTTPRequest.URL.Query()
+
+		// SSE info also goes in query string, so that the pre-signed URL is self-contained
+		// i.e. works without headers
+		switch extraArgs.ServerSideEncryption {
+		case s3.ServerSideEncryptionAes256:
+			q.Add("x-amz-server-side-encryption", extraArgs.ServerSideEncryption)
+		case s3.ServerSideEncryptionAwsKms:
+			q.Add("x-amz-server-side-encryption", extraArgs.ServerSideEncryption)
+			if extraArgs.SSEKMSKeyId != "" {
+				q.Add("x-amz-server-side-encryption-aws-kms-key-id", extraArgs.SSEKMSKeyId)
+			}
+		}
+		req.HTTPRequest.URL.RawQuery = q.Encode()
 	default:
 		return "", fmt.Errorf("unsupported client method [%v]", clientMethod.String())
 	}
@@ -165,12 +196,35 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	}
 
 	uploader := s3manager.NewUploaderWithClient(c.client)
-	_, err = uploader.Upload(&s3manager.UploadInput{
+	params := &s3manager.UploadInput{
 		Bucket:   aws.String(c.name), // Required
 		Key:      aws.String(name),   // Required
 		Body:     r,
 		Metadata: mdPrepped, // map[string]*string
-	})
+	}
+
+	// First, try to set SSE using stow.config
+	var extraArgs S3ExtraArgs
+	json.Unmarshal([]byte(c.extraArgs), &extraArgs)
+
+	if extraArgs.ServerSideEncryption == "" {
+		// As backup, try to set SSE using s3.GetBucketEncryption
+		if bucketEncrypted, sseAlgortihm, encryptionKey := getKmsMasterKeyId(c.client, c.name); bucketEncrypted {
+			extraArgs.ServerSideEncryption, extraArgs.SSEKMSKeyId = sseAlgortihm, encryptionKey
+		}
+	}
+
+	switch extraArgs.ServerSideEncryption {
+	case s3.ServerSideEncryptionAes256:
+		params.ServerSideEncryption = aws.String(extraArgs.ServerSideEncryption)
+	case s3.ServerSideEncryptionAwsKms:
+		params.ServerSideEncryption = aws.String(extraArgs.ServerSideEncryption)
+		if extraArgs.SSEKMSKeyId != "" {
+			params.SSEKMSKeyId = aws.String(extraArgs.SSEKMSKeyId)
+		}
+	}
+
+	_, err = uploader.Upload(params)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "PutObject, putting object")
@@ -317,7 +371,7 @@ func parseMetadata(md map[string]*string) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func getKMSMasterKeyID(svc *s3.S3, bucketName string) (bucketEncrypted bool, sseAlgortihm string, encryptionKey string) {
+func getKmsMasterKeyId(svc *s3.S3, bucketName string) (bucketEncrypted bool, sseAlgortihm string, encryptionKey string) {
 	input := &s3.GetBucketEncryptionInput{
 		Bucket: aws.String(bucketName),
 	}
