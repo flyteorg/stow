@@ -25,6 +25,8 @@ type container struct {
 	// region describes the AWS Availability Zone of the S3 Bucket.
 	region         string
 	customEndpoint string
+	// ssekmsid (optional) is the KMS key id, set if this S3 buckets is server-side encrypted
+	ssekmsid string
 }
 
 func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.ClientMethod, id string,
@@ -43,11 +45,17 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			contentMD5 = aws.String(params.ContentMD5)
 		}
 
-		req, _ = c.client.PutObjectRequest(&s3.PutObjectInput{
+		params := &s3.PutObjectInput{
 			Bucket:     aws.String(c.name),
 			Key:        aws.String(id),
 			ContentMD5: contentMD5,
-		})
+		}
+		if len(c.ssekmsid) > 0 {
+			params.ServerSideEncryption = aws.String(s3.ServerSideEncryptionAwsKms)
+			params.SSEKMSKeyId = aws.String(c.ssekmsid)
+		}
+
+		req, _ = c.client.PutObjectRequest(params)
 	default:
 		return "", fmt.Errorf("unsupported client method [%v]", clientMethod.String())
 	}
@@ -150,12 +158,18 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	}
 
 	uploader := s3manager.NewUploaderWithClient(c.client)
-	_, err = uploader.Upload(&s3manager.UploadInput{
+	params := &s3manager.UploadInput{
 		Bucket:   aws.String(c.name), // Required
 		Key:      aws.String(name),   // Required
 		Body:     r,
 		Metadata: mdPrepped, // map[string]*string
-	})
+	}
+	if len(c.ssekmsid) > 0 {
+		params.ServerSideEncryption = aws.String(s3.ServerSideEncryptionAwsKms)
+		params.SSEKMSKeyId = aws.String(c.ssekmsid)
+	}
+
+	_, err = uploader.Upload(params)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "PutObject, putting object")

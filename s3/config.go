@@ -50,6 +50,10 @@ const (
 	// Its default value is "false", to enable set to "true".
 	// This feature is useful for s3-compatible blob stores -- ie minio.
 	ConfigV2Signing = "v2_signing"
+
+	// ConfigSSEKMSID is an optional config value for s3 buckets using server-side encryption.
+	// It specifies the id of the KMS key used to encrypt/decrypt objects in the bucket.
+	ConfigSSEKMSID = "sse_kms_id"
 )
 
 func init() {
