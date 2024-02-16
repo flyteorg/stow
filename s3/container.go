@@ -57,15 +57,10 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			ContentMD5: contentMD5,
 		}
 
-		// First, try to set SSE using stow.config
+		// Set SSE using stow.config
 		var extraArgs S3ExtraArgs
-		json.Unmarshal([]byte(c.extraArgs), &extraArgs)
-
-		if extraArgs.ServerSideEncryption == "" {
-			// As backup, try to set SSE using s3.GetBucketEncryption
-			if bucketEncrypted, sseAlgortihm, encryptionKey := getKmsMasterKeyId(c.client, c.name); bucketEncrypted {
-				extraArgs.ServerSideEncryption, extraArgs.SSEKMSKeyId = sseAlgortihm, encryptionKey
-			}
+		if err := json.Unmarshal([]byte(c.extraArgs), &extraArgs); err != nil {
+			log.Printf("Error with extra_args json: %s\nContinuing...", err.Error())
 		}
 
 		// SSE info goes in headers, so that a valid signature is generated
@@ -203,15 +198,10 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 		Metadata: mdPrepped, // map[string]*string
 	}
 
-	// First, try to set SSE using stow.config
+	// Set SSE using stow.config
 	var extraArgs S3ExtraArgs
-	json.Unmarshal([]byte(c.extraArgs), &extraArgs)
-
-	if extraArgs.ServerSideEncryption == "" {
-		// As backup, try to set SSE using s3.GetBucketEncryption
-		if bucketEncrypted, sseAlgortihm, encryptionKey := getKmsMasterKeyId(c.client, c.name); bucketEncrypted {
-			extraArgs.ServerSideEncryption, extraArgs.SSEKMSKeyId = sseAlgortihm, encryptionKey
-		}
+	if err := json.Unmarshal([]byte(c.extraArgs), &extraArgs); err != nil {
+		log.Printf("Error with extra_args json: %s\nContinuing...", err.Error())
 	}
 
 	switch extraArgs.ServerSideEncryption {
@@ -369,37 +359,4 @@ func parseMetadata(md map[string]*string) (map[string]interface{}, error) {
 		m[k] = *value
 	}
 	return m, nil
-}
-
-func getKmsMasterKeyId(svc *s3.S3, bucketName string) (bucketEncrypted bool, sseAlgortihm string, encryptionKey string) {
-	input := &s3.GetBucketEncryptionInput{
-		Bucket: aws.String(bucketName),
-	}
-
-	output, err := svc.GetBucketEncryption(input)
-	if err != nil {
-		log.Printf("Bucket is not encrypted: %s", err.Error())
-		return false, "", ""
-	}
-
-	bucketEncryption := *output.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault
-	switch bucketEncryptionType := *bucketEncryption.SSEAlgorithm; bucketEncryptionType {
-
-	case s3.ServerSideEncryptionAwsKms:
-		// If bucket is KMS encrypted
-		log.Printf("Bucket %v has been encrypted with KMS", bucketName)
-		if bucketEncryption.KMSMasterKeyID != nil {
-			return true, s3.ServerSideEncryptionAwsKms, *bucketEncryption.KMSMasterKeyID
-		} else {
-			return true, s3.ServerSideEncryptionAwsKms, ""
-		}
-
-	case s3.ServerSideEncryptionAes256:
-		// If bucket is Aes256 encrypted
-		log.Printf("Bucket %v has been encrypted with AES256", bucketName)
-		return true, s3.ServerSideEncryptionAes256, ""
-	default:
-		log.Printf("Bucket is not encrypted")
-		return false, "", ""
-	}
 }
