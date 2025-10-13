@@ -3,10 +3,13 @@ package azure
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 
 	"github.com/flyteorg/stow"
 )
@@ -105,17 +108,22 @@ func makeAccountClient(cfg stow.Config) (*azblob.Client, RequestPreSigner, error
 
 	domainSuffix := resolveAzureDomainSuffix(cfg)
 	serviceUrl := fmt.Sprintf("https://%s.blob.%s", accountName, domainSuffix)
+	clientOptions := &azblob.ClientOptions{
+		ClientOptions: policy.ClientOptions{
+			Transport: http.DefaultClient,
+		},
+	}
 
 	key, ok := cfg.Config(ConfigKey)
 	if ok && key != "" {
-		return newSharedKeyClient(accountName, key, serviceUrl)
+		return newSharedKeyClient(accountName, key, serviceUrl, clientOptions)
 	}
-	return newDefaultAzureIdentityClient(serviceUrl)
+	return newDefaultAzureIdentityClient(serviceUrl, clientOptions)
 }
 
 // newSharedKeyClient creates client objects for working with a storage account
 // using shared keys.
-func newSharedKeyClient(accountName, key, serviceUrl string) (*azblob.Client, RequestPreSigner, error) {
+func newSharedKeyClient(accountName, key, serviceUrl string, options *azblob.ClientOptions) (*azblob.Client, RequestPreSigner, error) {
 	sharedKeyCred, err := azblob.NewSharedKeyCredential(accountName, key)
 	if err != nil {
 		return nil, nil, err
@@ -123,7 +131,7 @@ func newSharedKeyClient(accountName, key, serviceUrl string) (*azblob.Client, Re
 	client, err := azblob.NewClientWithSharedKeyCredential(
 		serviceUrl,
 		sharedKeyCred,
-		nil)
+		options)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -136,12 +144,12 @@ func newSharedKeyClient(accountName, key, serviceUrl string) (*azblob.Client, Re
 
 // newDefaultAzureIdentityClient creates client objects for working with a storage
 // account using Azure AD auth, resolved using the default Azure credential chain.
-func newDefaultAzureIdentityClient(serviceUrl string) (*azblob.Client, RequestPreSigner, error) {
+func newDefaultAzureIdentityClient(serviceUrl string, options *azblob.ClientOptions) (*azblob.Client, RequestPreSigner, error) {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	client, err := azblob.NewClient(serviceUrl, cred, nil)
+	client, err := azblob.NewClient(serviceUrl, cred, options)
 	if err != nil {
 		return nil, nil, err
 	}
