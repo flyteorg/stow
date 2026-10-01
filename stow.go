@@ -33,6 +33,9 @@ var (
 	// ErrBadCursor is returned by paging methods when the specified
 	// cursor is invalid.
 	ErrBadCursor = errors.New("bad cursor")
+	// ErrCopyNotSupported is returned by Copier.Copy when the source item
+	// cannot be copied server side into the container.
+	ErrCopyNotSupported = errors.New("copy not supported")
 )
 
 var (
@@ -167,6 +170,15 @@ type ItemRanger interface {
 	// OpenRange opens the item for reading starting at byte start and ending
 	// at byte end.
 	OpenRange(start, end uint64) (io.ReadCloser, error)
+}
+
+// Copier is implemented by containers that can copy an item on the server
+// side, so the content never passes through the caller.
+type Copier interface {
+	// Copy copies src into the container as an item called name, replacing
+	// any existing item, and returns the new item. src must come from a
+	// location of the same kind, otherwise ErrCopyNotSupported is returned.
+	Copy(ctx context.Context, src Item, name string) (Item, error)
 }
 
 // Taggable represents a taggable Item
