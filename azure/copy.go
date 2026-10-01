@@ -2,13 +2,14 @@ package azure
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -37,7 +38,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 	client := c.client.NewBlobClient(name)
 	resp, err := client.StartCopyFromURL(ctx, srcItem.client.URL(), nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "start copy")
+		return nil, fmt.Errorf("start copy: %w", err)
 	}
 
 	var (
@@ -74,7 +75,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 
 		props, err := client.GetProperties(ctx, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "copy status")
+			return nil, fmt.Errorf("copy status: %w", err)
 		}
 		if props.CopyID == nil || resp.CopyID == nil || *props.CopyID != *resp.CopyID {
 			return nil, errors.New("copy status: the blob was overwritten by another operation")
@@ -85,7 +86,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 		status = *props.CopyStatus
 		if status != blob.CopyStatusTypeSuccess {
 			if props.CopyStatusDescription != nil && status != blob.CopyStatusTypePending {
-				return nil, errors.Errorf("copy %s: %s", status, *props.CopyStatusDescription)
+				return nil, fmt.Errorf("copy %s: %s", status, *props.CopyStatusDescription)
 			}
 			continue
 		}
@@ -97,7 +98,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 		}
 	}
 	if status != blob.CopyStatusTypeSuccess {
-		return nil, errors.Errorf("copy %s", status)
+		return nil, fmt.Errorf("copy %s", status)
 	}
 
 	return &item{

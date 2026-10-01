@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -30,7 +29,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 	}
 	size, err := srcItem.Size()
 	if err != nil {
-		return nil, errors.Wrap(err, "Copy, getting the source size")
+		return nil, fmt.Errorf("copy, getting the source size: %w", err)
 	}
 	source := copySource(srcItem.container.name, srcItem.ID())
 
@@ -42,7 +41,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 			CopySource: aws.String(source),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "Copy, copying the object")
+			return nil, fmt.Errorf("copy, copying the object: %w", err)
 		}
 		if res.CopyObjectResult != nil && res.CopyObjectResult.ETag != nil {
 			etag = cleanEtag(*res.CopyObjectResult.ETag)
@@ -74,7 +73,7 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		Key:    aws.String(srcItem.ID()),
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "Copy, getting the source object")
+		return "", fmt.Errorf("copy, getting the source object: %w", err)
 	}
 
 	upload, err := c.client.CreateMultipartUploadWithContext(ctx, &s3.CreateMultipartUploadInput{
@@ -88,7 +87,7 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		CacheControl:       head.CacheControl,
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "Copy, creating the multipart upload")
+		return "", fmt.Errorf("copy, creating the multipart upload: %w", err)
 	}
 
 	abort := func() {
@@ -117,11 +116,11 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		})
 		if err != nil {
 			abort()
-			return "", errors.Wrapf(err, "Copy, copying part %d", number)
+			return "", fmt.Errorf("copy, copying part %d: %w", number, err)
 		}
 		if res.CopyPartResult == nil {
 			abort()
-			return "", errors.Errorf("Copy, copying part %d: empty result", number)
+			return "", fmt.Errorf("copy, copying part %d: empty result", number)
 		}
 		parts = append(parts, &s3.CompletedPart{
 			ETag:       res.CopyPartResult.ETag,
@@ -137,7 +136,7 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 	})
 	if err != nil {
 		abort()
-		return "", errors.Wrap(err, "Copy, completing the multipart upload")
+		return "", fmt.Errorf("copy, completing the multipart upload: %w", err)
 	}
 	if res.ETag == nil {
 		return "", nil
