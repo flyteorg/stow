@@ -109,6 +109,14 @@ func TestCopy(t *testing.T) {
 	})
 }
 
+func TestSameService(t *testing.T) {
+	aws := &container{}
+	assert.True(t, sameService(aws, &container{}))
+	assert.True(t, sameService(&container{customEndpoint: "http://a:9000"}, &container{customEndpoint: "http://a:9000"}))
+	assert.False(t, sameService(aws, &container{customEndpoint: "http://a:9000"}))
+	assert.False(t, sameService(&container{customEndpoint: "http://a:9000"}, &container{customEndpoint: "http://b:9000"}))
+}
+
 func TestCopyNilItem(t *testing.T) {
 	_, err := (&container{}).Copy(context.Background(), nil, "name")
 	assert.Error(t, err)

@@ -18,7 +18,6 @@ import (
 	azcontainer "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 // The account and the key every Azurite instance accepts.
@@ -157,6 +156,18 @@ func TestCopyFailedCopy(t *testing.T) {
 	_, err := dst.Copy(context.Background(), src, "copied.pb")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the reason")
+}
+
+func TestAccountURL(t *testing.T) {
+	newContainer := func(account, name string) *container {
+		client, err := azcontainer.NewClientWithNoCredential("https://"+account+".blob.core.windows.net/"+name, nil)
+		require.NoError(t, err)
+		return &container{id: name, client: client}
+	}
+
+	assert.Equal(t, "https://one.blob.core.windows.net", accountURL(newContainer("one", "data")))
+	assert.Equal(t, accountURL(newContainer("one", "src")), accountURL(newContainer("one", "dst")))
+	assert.NotEqual(t, accountURL(newContainer("one", "data")), accountURL(newContainer("two", "data")))
 }
 
 func TestCopyNilItem(t *testing.T) {

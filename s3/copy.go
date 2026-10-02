@@ -21,10 +21,10 @@ var (
 var _ stow.Copier = (*container)(nil)
 
 // Copy copies src into the container on the S3 side. An item from another
-// kind of location is streamed instead.
+// kind of location, or from another S3 service, is streamed instead.
 func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.Item, error) {
 	srcItem, ok := src.(*item)
-	if !ok {
+	if !ok || !sameService(srcItem.container, c) {
 		return stow.StreamCopy(ctx, c, src, name)
 	}
 	size, err := srcItem.Size()
@@ -142,6 +142,20 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		return "", nil
 	}
 	return cleanEtag(*res.ETag), nil
+}
+
+// sameService reports whether both containers live in the same S3 service, so
+// a bucket and a key name the same object for both of them. Buckets of two
+// S3-compatible endpoints, or of two AWS partitions, do not share a namespace.
+func sameService(a, b *container) bool {
+	return a.customEndpoint == b.customEndpoint && partition(a) == partition(b)
+}
+
+func partition(c *container) string {
+	if c.client == nil {
+		return ""
+	}
+	return c.client.PartitionID
 }
 
 // copySource builds the URL-encoded "bucket/key" S3 expects as a copy source.

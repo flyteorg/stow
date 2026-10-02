@@ -25,12 +25,12 @@ var _ stow.Copier = (*container)(nil)
 // content stays on the Azure side. The properties and the metadata of the
 // source blob are kept.
 //
-// A location is bound to one storage account, so the source is always in the
-// account of the destination and the credentials of the request authorize
-// reading it. An item from another kind of location is streamed instead.
+// The credentials of the request authorize reading a source in the storage
+// account of the destination. An item from another storage account, or from
+// another kind of location, is streamed instead.
 func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.Item, error) {
 	srcItem, ok := src.(*item)
-	if !ok {
+	if !ok || accountURL(srcItem.container) != accountURL(c) {
 		return stow.StreamCopy(ctx, c, src, name)
 	}
 
@@ -112,4 +112,12 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 			ContentLength: srcItem.properties.ContentLength,
 		},
 	}, nil
+}
+
+// accountURL returns the URL of the storage account of the container.
+func accountURL(c *container) string {
+	if c == nil || c.client == nil {
+		return ""
+	}
+	return strings.TrimSuffix(c.client.URL(), "/"+c.id)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
 
+	"github.com/flyteorg/stow"
 )
 
 // TestCopyEmulator runs against a Google Cloud Storage emulator, e.g.
@@ -27,12 +28,20 @@ func TestCopyEmulator(t *testing.T) {
 
 	client, err := storage.NewClient(ctx, option.WithoutAuthentication())
 	require.NoError(t, err)
-	defer client.Close()
+	t.Cleanup(func() { _ = client.Close() })
 
 	newContainer := func(prefix string) *Container {
 		name := fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 		require.NoError(t, client.Bucket(name).Create(ctx, "stow", nil))
-		return &Container{name: name, client: client, ctx: ctx}
+		c := &Container{name: name, client: client, ctx: ctx}
+		t.Cleanup(func() {
+			items, _, _ := c.Items("", stow.CursorStart, 100)
+			for _, i := range items {
+				_ = c.RemoveItem(i.ID())
+			}
+			_ = client.Bucket(name).Delete(ctx)
+		})
+		return c
 	}
 	srcContainer, dstContainer := newContainer("stow-copy-src"), newContainer("stow-copy-dst")
 
