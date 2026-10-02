@@ -65,6 +65,7 @@ func (c *Container) PreSignRequest(_ context.Context, clientMethod stow.ClientMe
 		Expires: time.Now().Add(params.ExpiresIn),
 		MD5:     params.ContentMD5,
 		Headers: headers,
+		Scheme:  storage.SigningSchemeV4,
 	})
 
 	return stow.PresignResponse{Url: url, RequiredRequestHeaders: requestHeaders}, error
