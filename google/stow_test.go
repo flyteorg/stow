@@ -1,7 +1,6 @@
 package google
 
 import (
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -21,7 +20,7 @@ func TestStow(t *testing.T) {
 		t.Skip("skipping test because GOOGLE_CREDENTIALS_FILE or GOOGLE_PROJECT_ID not set.")
 	}
 
-	b, err := ioutil.ReadFile(credFile)
+	b, err := os.ReadFile(credFile)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -146,7 +145,7 @@ func All(t *testing.T, kind string, config stow.Config) {
 		rc, err := ir.OpenRange(0, 3)
 		is.NoErr(err)
 		defer rc.Close()
-		b, err := ioutil.ReadAll(rc)
+		b, err := io.ReadAll(rc)
 		is.NoErr(err)
 		is.Equal(b, []byte("item"))
 	}
@@ -440,7 +439,7 @@ func readItemContents(is is.I, item stow.Item) string {
 		_, err = s.Seek(0, io.SeekStart)
 		is.NoErr(err)
 	}
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	is.NoErr(err)
 	return string(b)
 }

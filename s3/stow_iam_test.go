@@ -1,5 +1,4 @@
 //go:build iam
-// +build iam
 
 package s3
 
