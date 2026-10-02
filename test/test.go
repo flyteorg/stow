@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -85,7 +84,7 @@ func All(t *testing.T, kind string, config stow.Config) {
 	}()
 
 	// Item metadata. Keys are usually transposed differently depending on the sdk.
-	md1 := map[string]interface{}{"stowmetadata": "foo"}
+	md1 := map[string]any{"stowmetadata": "foo"}
 
 	// add three items to c1 + add metadata to one item, assert if the implementation allows.
 	// Tests metadata retrieval on PUTs.
@@ -146,7 +145,7 @@ func All(t *testing.T, kind string, config stow.Config) {
 		rc, err := ir.OpenRange(0, 3)
 		is.NoErr(err)
 		defer rc.Close()
-		b, err := ioutil.ReadAll(rc)
+		b, err := io.ReadAll(rc)
 		is.NoErr(err)
 		is.Equal(b, []byte("item"))
 	}
@@ -365,7 +364,7 @@ func BigFileUpload(t *testing.T, kind string, config stow.Config, fileSize int64
 		os.Remove(f.Name())
 	}()
 	f.Truncate(fileSize)
-	item, err := testContainer.Put("test-upload-file", f, fileSize, map[string]interface{}{})
+	item, err := testContainer.Put("test-upload-file", f, fileSize, map[string]any{})
 	is.NoErr(err)
 	itemSize, err := item.Size()
 	is.NoErr(err)
@@ -414,7 +413,7 @@ func createContainer(is is.I, location stow.Location, name string) stow.Containe
 	return container
 }
 
-func putItem(is is.I, container stow.Container, name, content string, md map[string]interface{}) (stow.Item, bool) {
+func putItem(is is.I, container stow.Container, name, content string, md map[string]any) (stow.Item, bool) {
 	var skipAssertion bool // skip metadata assertion
 	item, err := container.Put(name, strings.NewReader(content), int64(len(content)), md)
 
@@ -440,7 +439,7 @@ func readItemContents(is is.I, item stow.Item) string {
 		_, err = s.Seek(0, io.SeekStart)
 		is.NoErr(err)
 	}
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	is.NoErr(err)
 	return string(b)
 }
@@ -507,7 +506,7 @@ func randName(length int) string {
 	return string(b)
 }
 
-func checkMetadata(t *testing.T, is is.I, item stow.Item, md map[string]interface{}) error {
+func checkMetadata(t *testing.T, is is.I, item stow.Item, md map[string]any) error {
 	itemMD, err := item.Metadata()
 	if err != nil {
 		is.Failf("error retrieving item metadata: %v", err)

@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/pkg/errors"
-	"google.golang.org/api/iterator"
-
 	"github.com/flyteorg/stow"
+	"google.golang.org/api/iterator"
 )
 
 const googleMetadataPrefix = "x-goog-meta-"
@@ -119,7 +118,7 @@ func (c *Container) RemoveItem(id string) error {
 // Put sends a request to upload content to the container. The arguments
 // received are the name of the item, a reader representing the
 // content, and the size of the file.
-func (c *Container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+func (c *Container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	obj := c.Bucket().Object(name)
 
 	mdPrepped, err := prepMetadata(metadata)
@@ -142,9 +141,7 @@ func (c *Container) Put(name string, r io.Reader, size int64, metadata map[strin
 func merge(metadata ...map[string]string) map[string]string {
 	res := map[string]string{}
 	for _, mt := range metadata {
-		for k, v := range mt {
-			res[k] = v
-		}
+		maps.Copy(res, mt)
 	}
 	return res
 }
@@ -172,20 +169,20 @@ func (c *Container) convertToStowItem(attr *storage.ObjectAttrs) (stow.Item, err
 	}, nil
 }
 
-func parseMetadata(metadataParsed map[string]string) (map[string]interface{}, error) {
-	metadataParsedMap := make(map[string]interface{}, len(metadataParsed))
+func parseMetadata(metadataParsed map[string]string) (map[string]any, error) {
+	metadataParsedMap := make(map[string]any, len(metadataParsed))
 	for key, value := range metadataParsed {
 		metadataParsedMap[key] = value
 	}
 	return metadataParsedMap, nil
 }
 
-func prepMetadata(metadataParsed map[string]interface{}) (map[string]string, error) {
+func prepMetadata(metadataParsed map[string]any) (map[string]string, error) {
 	returnMap := make(map[string]string, len(metadataParsed))
 	for key, value := range metadataParsed {
 		str, ok := value.(string)
 		if !ok {
-			return nil, errors.Errorf(`value of key '%s' in metadata must be of type string`, key)
+			return nil, fmt.Errorf(`value of key '%s' in metadata must be of type string`, key)
 		}
 		returnMap[key] = str
 	}

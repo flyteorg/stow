@@ -96,7 +96,7 @@ type Location interface {
 type PresignRequestParams struct {
 	ExpiresIn             time.Duration
 	ContentMD5            string
-	ExtraParams           map[string]interface{}
+	ExtraParams           map[string]any
 	HttpMethod            HttpMethod
 	AddContentMD5Metadata bool
 }
@@ -128,7 +128,7 @@ type Container interface {
 	RemoveItem(id string) error
 	// Put creates a new Item with the specified name, and contents
 	// read from the reader.
-	Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (Item, error)
+	Put(name string, r io.Reader, size int64, metadata map[string]any) (Item, error)
 	// PreSignRequest generates a pre-signed url for the given id (key after bucket/container) and a given clientMethod.
 	PreSignRequest(ctx context.Context, clientMethod ClientMethod, id string, params PresignRequestParams) (response PresignResponse, err error)
 }
@@ -159,7 +159,7 @@ type Item interface {
 	LastMod() (time.Time, error)
 	// Metadata gets a map of key/values that belong
 	// to this Item.
-	Metadata() (map[string]interface{}, error)
+	Metadata() (map[string]any, error)
 }
 
 // ItemRanger represents an item that can be partially downloaded.
@@ -172,7 +172,7 @@ type ItemRanger interface {
 // Taggable represents a taggable Item
 type Taggable interface {
 	// Tags returns a list of tags that belong to a given Item
-	Tags() (map[string]interface{}, error)
+	Tags() (map[string]any, error)
 }
 
 // Config represents key/value configuration.

@@ -2,16 +2,15 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 // A location contains a client + the configurations used to create the client.
@@ -26,12 +25,12 @@ type location struct {
 // options that can be provided.
 func (l *location) CreateContainer(containerName string) (stow.Container, error) {
 	createBucketParams := &s3.CreateBucketInput{
-		Bucket: aws.String(containerName), // required
+		Bucket: new(containerName), // required
 	}
 
 	_, err := l.client.CreateBucket(createBucketParams)
 	if err != nil {
-		return nil, errors.Wrap(err, "CreateContainer, creating the bucket")
+		return nil, fmt.Errorf("CreateContainer, creating the bucket: %w", err)
 	}
 
 	region, _ := l.config.Config("region")
@@ -59,7 +58,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 	var params *s3.ListBucketsInput
 	bucketList, err := l.client.ListBuckets(params)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "Containers, listing the buckets")
+		return nil, "", fmt.Errorf("Containers, listing the buckets: %w", err)
 	}
 
 	// Seek to the current bucket, according to cursor.
@@ -112,7 +111,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 					// strong signal that the bucket has been deleted.
 					continue
 				}
-				return nil, "", errors.Wrapf(err, "Containers, getting bucket region for: %s", *bucket.Name)
+				return nil, "", fmt.Errorf("Containers, getting bucket region for: %s: %w", *bucket.Name, err)
 			}
 			if regionSet && region != "" && bucketRegion != region {
 				continue
@@ -120,7 +119,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 
 			client, _, err = newS3Client(l.config, bucketRegion)
 			if err != nil {
-				return nil, "", errors.Wrapf(err, "Containers, creating new client for region: %s", bucketRegion)
+				return nil, "", fmt.Errorf("Containers, creating new client for region: %s: %w", bucketRegion, err)
 			}
 		}
 
@@ -159,7 +158,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 		var err error
 		client, _, err = newS3Client(l.config, bucketRegion)
 		if err != nil {
-			return nil, errors.Wrapf(err, "Container, creating new client for region: %s", bucketRegion)
+			return nil, fmt.Errorf("Container, creating new client for region: %s: %w", bucketRegion, err)
 		}
 	}
 
@@ -175,7 +174,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 	}
 
 	params := &s3.GetBucketLocationInput{
-		Bucket: aws.String(id),
+		Bucket: new(id),
 	}
 
 	_, err := client.GetBucketLocation(params)
@@ -184,7 +183,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 			return nil, stow.ErrNotFound
 		}
 
-		return nil, errors.Wrap(err, "GetBucketLocation")
+		return nil, fmt.Errorf("GetBucketLocation: %w", err)
 	}
 
 	return c, nil
@@ -193,12 +192,12 @@ func (l *location) Container(id string) (stow.Container, error) {
 // RemoveContainer removes a container simply by name.
 func (l *location) RemoveContainer(id string) error {
 	params := &s3.DeleteBucketInput{
-		Bucket: aws.String(id),
+		Bucket: new(id),
 	}
 
 	_, err := l.client.DeleteBucket(params)
 	if err != nil {
-		return errors.Wrap(err, "RemoveContainer, deleting the bucket")
+		return fmt.Errorf("RemoveContainer, deleting the bucket: %w", err)
 	}
 
 	return nil
@@ -214,35 +213,27 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 		// url = <genericURL[0]><region><genericURL[1]><bucket name><object path>
 		firstCut := strings.Replace(url.Path, genericURL[0], "", 1)
 
-		// find first dot so that we could extract region.
-		dotIndex := strings.Index(firstCut, ".")
-
-		// region of the s3 bucket.
-		region := firstCut[0:dotIndex]
+		// region of the s3 bucket is everything before the first dot.
+		region, _, _ := strings.Cut(firstCut, ".")
 
 		// Remove <region><genericURL[1]> from
 		// <region><genericURL[1]><bucket name><object path>
 		secondCut := strings.Replace(firstCut, region+genericURL[1], "", 1)
 
-		// Get the index of the first slash to get the end of the bucket name.
-		firstSlash := strings.Index(secondCut, "/")
-
-		// Grab bucket name
-		bucketName := secondCut[:firstSlash]
-
-		// Everything afterwards pertains to object.
-		objectPath := secondCut[firstSlash+1:]
+		// The bucket name ends at the first slash, everything afterwards
+		// pertains to object.
+		bucketName, objectPath, _ := strings.Cut(secondCut, "/")
 
 		// Get the container by bucket name.
 		cont, err := l.Container(bucketName)
 		if err != nil {
-			return nil, errors.Wrapf(err, "ItemByURL, getting container by the bucketname %s", bucketName)
+			return nil, fmt.Errorf("ItemByURL, getting container by the bucketname %s: %w", bucketName, err)
 		}
 
 		// Get the item by object name.
 		it, err := cont.Item(objectPath)
 		if err != nil {
-			return nil, errors.Wrapf(err, "ItemByURL, getting item by object name %s", objectPath)
+			return nil, fmt.Errorf("ItemByURL, getting item by object name %s: %w", objectPath, err)
 		}
 
 		return it, err
@@ -255,12 +246,12 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 
 	c, err := l.Container(containerName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "ItemByURL, getting container by the bucketname %s", containerName)
+		return nil, fmt.Errorf("ItemByURL, getting container by the bucketname %s: %w", containerName, err)
 	}
 
 	i, err := c.Item(itemName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "ItemByURL, getting item by object name %s", itemName)
+		return nil, fmt.Errorf("ItemByURL, getting item by object name %s: %w", itemName, err)
 	}
 	return i, nil
 }

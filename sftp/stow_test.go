@@ -1,7 +1,6 @@
 package sftp
 
 import (
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"strings"
@@ -25,7 +24,7 @@ func TestStow(t *testing.T) {
 		t.Skip("skipping tests because environment isn't configured")
 	}
 
-	b, err := ioutil.ReadFile(os.Getenv("SFTP_PRIVATE_KEY_FILE"))
+	b, err := os.ReadFile(os.Getenv("SFTP_PRIVATE_KEY_FILE"))
 	require.NoError(t, err)
 	config[ConfigPrivateKey] = string(b)
 	config[ConfigPrivateKeyPassphrase] = os.Getenv("SFTP_PRIVATE_KEY_PASSPHRASE")

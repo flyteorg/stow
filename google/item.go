@@ -10,15 +10,15 @@ import (
 )
 
 type Item struct {
-	container    *Container       // Container information is required by a few methods.
-	client       *storage.Client  // A client is needed to make requests.
+	container    *Container      // Container information is required by a few methods.
+	client       *storage.Client // A client is needed to make requests.
 	name         string
 	hash         string
 	etag         string
 	size         int64
 	url          *url.URL
 	lastModified time.Time
-	metadata     map[string]interface{}
+	metadata     map[string]any
 	object       *storage.ObjectAttrs
 	ctx          context.Context
 }
@@ -52,7 +52,7 @@ func (i *Item) Open() (io.ReadCloser, error) {
 // OpenRange returns an io.Reader to the object for a specific byte range
 func (i *Item) OpenRange(start, end uint64) (io.ReadCloser, error) {
 	obj := i.container.Bucket().Object(i.name)
-	return obj.NewRangeReader(i.ctx, int64(start), int64(end - start) + 1)
+	return obj.NewRangeReader(i.ctx, int64(start), int64(end-start)+1)
 }
 
 // LastMod returns the last modified date of the item.
@@ -61,7 +61,7 @@ func (i *Item) LastMod() (time.Time, error) {
 }
 
 // Metadata returns a nil map and no error.
-func (i *Item) Metadata() (map[string]interface{}, error) {
+func (i *Item) Metadata() (map[string]any, error) {
 	return i.metadata, nil
 }
 

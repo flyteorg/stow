@@ -8,7 +8,6 @@ import (
 
 	"github.com/flyteorg/stow"
 	"github.com/ncw/swift"
-	"github.com/pkg/errors"
 )
 
 type container struct {
@@ -72,20 +71,20 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 }
 
 // Put creates or updates a CloudStorage object within the given container.
-func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	mdPrepped, err := prepMetadata(metadata)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create or update Item, preparing metadata")
+		return nil, fmt.Errorf("unable to create or update Item, preparing metadata: %w", err)
 	}
 
 	_, err = c.client.ObjectPut(c.id, name, r, false, "", "", nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create or update Item")
+		return nil, fmt.Errorf("unable to create or update Item: %w", err)
 	}
 
 	err = c.client.ObjectUpdate(c.id, name, mdPrepped)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to update Item metadata")
+		return nil, fmt.Errorf("unable to update Item metadata: %w", err)
 	}
 
 	item := &item{
@@ -117,7 +116,7 @@ func (c *container) getItem(id string) (*item, error) {
 
 	md, err := parseMetadata(headers)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to retrieve Item information, parsing metadata")
+		return nil, fmt.Errorf("unable to retrieve Item information, parsing metadata: %w", err)
 	}
 
 	item := &item{
@@ -134,20 +133,20 @@ func (c *container) getItem(id string) (*item, error) {
 }
 
 // Keys are returned as all lowercase
-func parseMetadata(md swift.Headers) (map[string]interface{}, error) {
-	m := make(map[string]interface{}, len(md))
+func parseMetadata(md swift.Headers) (map[string]any, error) {
+	m := make(map[string]any, len(md))
 	for key, value := range md.ObjectMetadata() {
 		m[key] = value
 	}
 	return m, nil
 }
 
-func prepMetadata(md map[string]interface{}) (map[string]string, error) {
+func prepMetadata(md map[string]any) (map[string]string, error) {
 	m := make(map[string]string, len(md))
 	for key, value := range md {
 		str, ok := value.(string)
 		if !ok {
-			return nil, errors.Errorf(`value of key '%s' in metadata must be of type string`, key)
+			return nil, fmt.Errorf(`value of key '%s' in metadata must be of type string`, key)
 		}
 		m["X-Object-Meta-"+key] = str
 	}

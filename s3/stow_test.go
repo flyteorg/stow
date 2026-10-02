@@ -16,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cheekybits/is"
 	"github.com/flyteorg/stow"
@@ -96,11 +95,11 @@ func TestPrepMetadataSuccess(t *testing.T) {
 	is := is.New(t)
 
 	m := make(map[string]*string)
-	m["one"] = aws.String("two")
-	m["3"] = aws.String("4")
-	m["ninety-nine"] = aws.String("100")
+	m["one"] = new("two")
+	m["3"] = new("4")
+	m["ninety-nine"] = new("100")
 
-	m2 := make(map[string]interface{})
+	m2 := make(map[string]any)
 	for key, value := range m {
 		str := *value
 		m2[key] = str
@@ -117,7 +116,7 @@ func TestPrepMetadataSuccess(t *testing.T) {
 func TestPrepMetadataFailureWithNonStringValues(t *testing.T) {
 	is := is.New(t)
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	m["float"] = 8.9
 	m["number"] = 9
 
@@ -218,7 +217,7 @@ func TestWillRequestRegionWhenConfigured(t *testing.T) {
 		is.NoErr(err)
 		is.Equal(awsLocationQuery.Encode(), r.URL.RawQuery)
 		b, _ := json.Marshal(s3.GetBucketLocationOutput{
-			LocationConstraint: aws.String("whatever"),
+			LocationConstraint: new("whatever"),
 		})
 		w.Write(b)
 		w.WriteHeader(http.StatusOK)

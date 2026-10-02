@@ -27,7 +27,7 @@ func TestItemsPaging(t *testing.T) {
 	container := containers[1]
 
 	// make 25 items
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		_, err := container.Put(fmt.Sprintf("item-%02d", i), strings.NewReader(`item`), 4, nil)
 		is.NoErr(err)
 	}
