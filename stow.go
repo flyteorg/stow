@@ -3,6 +3,7 @@ package stow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"sync"
@@ -167,6 +168,50 @@ type ItemRanger interface {
 	// OpenRange opens the item for reading starting at byte start and ending
 	// at byte end.
 	OpenRange(start, end uint64) (io.ReadCloser, error)
+}
+
+// Copier is implemented by containers that can copy an item into themselves.
+type Copier interface {
+	// Copy copies src into the container as an item called name, replacing
+	// any existing item, and returns the new item. When src comes from the
+	// same kind of location and the backend supports it, the copy is made
+	// on the server side and the content never passes through the caller.
+	// Otherwise the content is streamed from src to the container.
+	Copy(ctx context.Context, src Item, name string) (Item, error)
+}
+
+// StreamCopy copies src into dst as an item called name by streaming the
+// content through the caller. It is what Copier implementations fall back
+// to when the backend cannot copy src on the server side.
+func StreamCopy(ctx context.Context, dst Container, src Item, name string) (Item, error) {
+	if src == nil {
+		return nil, errors.New("copy: nil source item")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	size, err := src.Size()
+	if err != nil {
+		return nil, fmt.Errorf("copy, getting the source size: %w", err)
+	}
+	metadata, err := src.Metadata()
+	if err != nil {
+		return nil, fmt.Errorf("copy, getting the source metadata: %w", err)
+	}
+	r, err := src.Open()
+	if err != nil {
+		return nil, fmt.Errorf("copy, opening the source: %w", err)
+	}
+
+	item, err := dst.Put(name, r, size, metadata)
+	if closeErr := r.Close(); err == nil && closeErr != nil {
+		err = fmt.Errorf("copy, closing the source: %w", closeErr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
 // Taggable represents a taggable Item
