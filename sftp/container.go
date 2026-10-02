@@ -172,7 +172,7 @@ func (c *container) RemoveItem(id string) error {
 }
 
 // Put sends a request to upload content to the container.
-func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	if len(metadata) > 0 {
 		return nil, stow.NotSupported("metadata")
 	}

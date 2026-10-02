@@ -2,12 +2,12 @@ package azure
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"net/url"
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/flyteorg/stow"
 )
 
@@ -17,7 +17,7 @@ type item struct {
 	client     *blob.Client
 	properties *BlobProps
 	url        url.URL
-	metadata   map[string]interface{}
+	metadata   map[string]any
 	infoOnce   sync.Once
 	infoErr    error
 }
@@ -62,7 +62,7 @@ func (i *item) LastMod() (time.Time, error) {
 	return i.properties.LastModified, nil
 }
 
-func (i *item) Metadata() (map[string]interface{}, error) {
+func (i *item) Metadata() (map[string]any, error) {
 	return i.metadata, nil
 }
 

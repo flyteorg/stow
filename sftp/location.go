@@ -1,6 +1,8 @@
 package sftp
 
 import (
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -9,7 +11,6 @@ import (
 
 	"github.com/flyteorg/stow"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -84,13 +85,13 @@ func (l *location) Close() error {
 
 	if l.sftpClient != nil {
 		if err := l.sftpClient.Close(); err != nil {
-			errs = multierror.Append(errs, errors.Wrap(err, "closing sftp conn"))
+			errs = multierror.Append(errs, fmt.Errorf("closing sftp conn: %w", err))
 		}
 	}
 
 	if l.sshClient != nil {
 		if err := l.sshClient.Close(); err != nil {
-			errs = multierror.Append(errs, errors.Wrap(err, "closing ssh conn"))
+			errs = multierror.Append(errs, fmt.Errorf("closing ssh conn: %w", err))
 		}
 	}
 
@@ -129,7 +130,7 @@ func recurseRemove(client *sftp.Client, path string) error {
 
 	for _, v := range infos {
 		if !v.IsDir() {
-			return errors.Errorf("directory not empty - %q", v.Name())
+			return fmt.Errorf("directory not empty - %q", v.Name())
 		}
 		if err := recurseRemove(client, filepath.Join(path, v.Name())); err != nil {
 			return err
@@ -154,12 +155,12 @@ func (l *location) ItemByURL(u *url.URL) (stow.Item, error) {
 
 	c, err := l.Container(containerName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "ItemByURL, getting container %q", containerName)
+		return nil, fmt.Errorf("ItemByURL, getting container %q: %w", containerName, err)
 	}
 
 	i, err := c.Item(itemName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "ItemByURL, getting item %q", itemName)
+		return nil, fmt.Errorf("ItemByURL, getting item %q: %w", itemName, err)
 	}
 
 	return i, nil

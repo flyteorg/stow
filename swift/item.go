@@ -20,7 +20,7 @@ type item struct {
 	size         int64
 	url          url.URL
 	lastModified time.Time
-	metadata     map[string]interface{}
+	metadata     map[string]any
 	infoOnce     sync.Once
 	infoErr      error
 }
@@ -72,7 +72,7 @@ func (i *item) LastMod() (time.Time, error) {
 }
 
 // Metadata returns a map of key value pairs representing an Item's metadata
-func (i *item) Metadata() (map[string]interface{}, error) {
+func (i *item) Metadata() (map[string]any, error) {
 	err := i.ensureInfo()
 	if err != nil {
 		return nil, err
