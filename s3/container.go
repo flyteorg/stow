@@ -2,15 +2,18 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/flyteorg/stow"
 )
 
@@ -19,7 +22,7 @@ type container struct {
 	// name is needed to retrieve items.
 	name string
 	// client is responsible for performing the requests.
-	client *s3.S3
+	client *s3.Client
 	// region describes the AWS Availability Zone of the S3 Bucket.
 	region         string
 	customEndpoint string
@@ -28,11 +31,18 @@ type container struct {
 func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.ClientMethod, id string,
 	params stow.PresignRequestParams) (response stow.PresignResponse, err error) {
 
-	var req *request.Request
+	presignClient := s3.NewPresignClient(c.client, func(o *s3.PresignOptions) {
+		o.Expires = params.ExpiresIn
+		if signer, ok := c.client.Options().HTTPSignerV4.(v2Signer); ok {
+			o.Presigner = signer
+		}
+	})
+
+	var req *v4.PresignedHTTPRequest
 	var requestHeaders map[string]string
 	switch clientMethod {
 	case stow.ClientMethodGet:
-		req, _ = c.client.GetObjectRequest(&s3.GetObjectInput{
+		req, err = presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 			Bucket: new(c.name),
 			Key:    new(id),
 		})
@@ -42,14 +52,14 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 			contentMD5 = new(params.ContentMD5)
 		}
 
-		metadata := make(map[string]*string)
+		metadata := make(map[string]string)
 		requestHeaders = map[string]string{"Content-Length": strconv.Itoa(len(params.ContentMD5)), "Content-MD5": params.ContentMD5}
 		if params.AddContentMD5Metadata {
-			metadata[stow.FlyteContentMD5] = new(params.ContentMD5)
+			metadata[stow.FlyteContentMD5] = params.ContentMD5
 			requestHeaders[fmt.Sprintf("x-amz-meta-%s", stow.FlyteContentMD5)] = params.ContentMD5
 		}
 
-		req, _ = c.client.PutObjectRequest(&s3.PutObjectInput{
+		req, err = presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
 			Bucket:     new(c.name),
 			Key:        new(id),
 			ContentMD5: contentMD5,
@@ -59,10 +69,11 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 		return stow.PresignResponse{}, fmt.Errorf("unsupported client method [%v]", clientMethod.String())
 	}
 
-	req.SetContext(ctx)
-	url, err := req.Presign(params.ExpiresIn)
+	if err != nil {
+		return stow.PresignResponse{}, err
+	}
 
-	return stow.PresignResponse{Url: url, RequiredRequestHeaders: requestHeaders}, err
+	return stow.PresignResponse{Url: req.URL, RequiredRequestHeaders: requestHeaders}, nil
 }
 
 // ID returns a string value which represents the name of the container.
@@ -85,7 +96,7 @@ func (c *container) Item(id string) (stow.Item, error) {
 // Items sends a request to retrieve a list of items that are prepended with
 // the prefix argument. The 'cursor' variable facilitates pagination.
 func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string, error) {
-	itemLimit := int64(count)
+	itemLimit := int32(count)
 
 	params := &s3.ListObjectsV2Input{
 		Bucket:     new(c.Name()),
@@ -94,7 +105,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 		Prefix:     &prefix,
 	}
 
-	response, err := c.client.ListObjectsV2(params)
+	response, err := c.client.ListObjectsV2(context.Background(), params)
 	if err != nil {
 		return nil, "", fmt.Errorf("Items, listing objects: %w", err)
 	}
@@ -102,22 +113,21 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 	var containerItems []stow.Item
 
 	for _, object := range response.Contents {
-		if *object.StorageClass == "GLACIER" {
+		if object.StorageClass == types.ObjectStorageClassGlacier {
 			continue
 		}
 		etag := cleanEtag(*object.ETag) // Copy etag value and remove the strings.
-		object.ETag = &etag             // Assign the value to the object field representing the item.
 
 		newItem := &item{
 			container: c,
 			client:    c.client,
 			properties: properties{
-				ETag:         object.ETag,
+				ETag:         &etag,
 				Key:          object.Key,
 				LastModified: object.LastModified,
 				Owner:        object.Owner,
 				Size:         object.Size,
-				StorageClass: object.StorageClass,
+				StorageClass: new(string(object.StorageClass)),
 			},
 		}
 		containerItems = append(containerItems, newItem)
@@ -126,7 +136,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 	// Create a marker and determine if the list of items to retrieve is complete.
 	// If not, the last file is the input to the value of after which item to start
 	startAfter := ""
-	if *response.IsTruncated {
+	if aws.ToBool(response.IsTruncated) {
 		startAfter = containerItems[len(containerItems)-1].Name()
 	}
 
@@ -139,7 +149,7 @@ func (c *container) RemoveItem(id string) error {
 		Key:    new(id),
 	}
 
-	_, err := c.client.DeleteObject(params)
+	_, err := c.client.DeleteObject(context.Background(), params)
 	if err != nil {
 		return fmt.Errorf("RemoveItem, deleting object %+v: %w", params, err)
 	}
@@ -151,24 +161,26 @@ func (c *container) RemoveItem(id string) error {
 // content, and the size of the file. Many more attributes can be given to the
 // file, including metadata. Keeping it simple for now.
 func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
-	// Convert map[string]interface{} to map[string]*string
+	// Convert map[string]interface{} to map[string]string
 	mdPrepped, err := prepMetadata(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create or update item, preparing metadata: %w", err)
 	}
 
-	uploader := s3manager.NewUploaderWithClient(c.client)
-	_, err = uploader.Upload(&s3manager.UploadInput{
+	uploader := transfermanager.New(c.client, func(o *transfermanager.Options) {
+		o.RequestChecksumCalculation = c.client.Options().RequestChecksumCalculation
+	})
+	_, err = uploader.UploadObject(context.Background(), &transfermanager.UploadObjectInput{
 		Bucket:   new(c.name), // Required
 		Key:      new(name),   // Required
 		Body:     r,
-		Metadata: mdPrepped, // map[string]*string
+		Metadata: mdPrepped, // map[string]string
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("PutObject, putting object: %w", err)
 	}
-	i, err := c.client.HeadObject(&s3.HeadObjectInput{
+	i, err := c.client.HeadObject(context.Background(), &s3.HeadObjectInput{
 		Key:    new(name),
 		Bucket: new(c.name),
 	})
@@ -181,8 +193,6 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	// Some fields are empty because this information isn't included in the response.
 	// May have to involve sending a request if we want more specific information.
 	// Keeping it simple for now.
-	// s3.Object info: https://github.com/aws/aws-sdk-go/blob/master/service/s3/api.go#L7092-L7107
-	// Response: https://github.com/aws/aws-sdk-go/blob/master/service/s3/api.go#L8193-L8227
 	newItem := &item{
 		container: c,
 		client:    c.client,
@@ -191,7 +201,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 			Key:  &name,
 			Size: &size,
 			//LastModified *time.Time
-			//Owner        *s3.Owner
+			//Owner        *types.Owner
 			//StorageClass *string
 		},
 	}
@@ -217,10 +227,10 @@ func (c *container) getItem(id string) (*item, error) {
 		Key:    new(id),
 	}
 
-	res, err := c.client.HeadObject(params)
+	res, err := c.client.HeadObject(context.Background(), params)
 	if err != nil {
 		// stow needs ErrNotFound to pass the test but amazon returns an opaque error
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+		if aerr, ok := errors.AsType[smithy.APIError](err); ok && aerr.ErrorCode() == "NotFound" {
 			return nil, stow.ErrNotFound
 		}
 		return nil, fmt.Errorf("getItem, getting the object: %w", err)
@@ -241,7 +251,7 @@ func (c *container) getItem(id string) (*item, error) {
 			LastModified: res.LastModified,
 			Owner:        nil, // not returned in the response.
 			Size:         res.ContentLength,
-			StorageClass: res.StorageClass,
+			StorageClass: new(string(res.StorageClass)),
 			Metadata:     md,
 		},
 	}
@@ -285,27 +295,27 @@ func cleanEtag(etag string) string {
 	return etag
 }
 
-// prepMetadata parses a raw map into the native type required by S3 to set metadata (map[string]*string).
+// prepMetadata parses a raw map into the native type required by S3 to set metadata (map[string]string).
 // TODO: validation for key values. This function also assumes that the value of a key value pair is a string.
-func prepMetadata(md map[string]any) (map[string]*string, error) {
-	m := make(map[string]*string, len(md))
+func prepMetadata(md map[string]any) (map[string]string, error) {
+	m := make(map[string]string, len(md))
 	for key, value := range md {
 		strValue, valid := value.(string)
 		if !valid {
 			return nil, fmt.Errorf(`value of key '%s' in metadata must be of type string`, key)
 		}
-		m[key] = new(strValue)
+		m[key] = strValue
 	}
 	return m, nil
 }
 
 // The first letter of a dash separated key value is capitalized, so perform a ToLower on it.
 // This Key transformation of returning lowercase is consistent with other locations..
-func parseMetadata(md map[string]*string) (map[string]any, error) {
+func parseMetadata(md map[string]string) (map[string]any, error) {
 	m := make(map[string]any, len(md))
 	for key, value := range md {
 		k := strings.ToLower(key)
-		m[k] = *value
+		m[k] = value
 	}
 	return m, nil
 }

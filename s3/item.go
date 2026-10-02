@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/url"
@@ -8,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/flyteorg/stow"
 )
 
@@ -23,7 +25,7 @@ type item struct {
 	// Container information is required by a few methods.
 	container *container
 	// A client is needed to make requests.
-	client *s3.S3
+	client *s3.Client
 	// properties represent the characteristics of the file. Name, Etag, etc.
 	properties properties
 	infoOnce   sync.Once
@@ -34,12 +36,12 @@ type item struct {
 }
 
 type properties struct {
-	ETag         *string    `type:"string"`
-	Key          *string    `min:"1" type:"string"`
-	LastModified *time.Time `type:"timestamp" timestampFormat:"iso8601"`
-	Owner        *s3.Owner  `type:"structure"`
-	Size         *int64     `type:"integer"`
-	StorageClass *string    `type:"string" enum:"ObjectStorageClass"`
+	ETag         *string      `type:"string"`
+	Key          *string      `min:"1" type:"string"`
+	LastModified *time.Time   `type:"timestamp" timestampFormat:"iso8601"`
+	Owner        *types.Owner `type:"structure"`
+	Size         *int64       `type:"integer"`
+	StorageClass *string      `type:"string" enum:"ObjectStorageClass"`
 	Metadata     map[string]any
 }
 
@@ -86,7 +88,7 @@ func (i *item) Open() (io.ReadCloser, error) {
 		Key:    new(i.ID()),
 	}
 
-	response, err := i.client.GetObject(params)
+	response, err := i.client.GetObject(context.Background(), params)
 	if err != nil {
 		return nil, fmt.Errorf("Open, getting the object: %w", err)
 	}
@@ -164,7 +166,7 @@ func (i *item) Tags() (map[string]any, error) {
 			Key:    new(i.ID()),
 		}
 
-		res, err := i.client.GetObjectTagging(params)
+		res, err := i.client.GetObjectTagging(context.Background(), params)
 		if err != nil {
 			if strings.Contains(err.Error(), "NoSuchKey") {
 				i.tagsErr = stow.ErrNotFound
@@ -192,7 +194,7 @@ func (i *item) OpenRange(start, end uint64) (io.ReadCloser, error) {
 		Range:  new(fmt.Sprintf("bytes=%d-%d", start, end)),
 	}
 
-	response, err := i.client.GetObject(params)
+	response, err := i.client.GetObject(context.Background(), params)
 	if err != nil {
 		return nil, fmt.Errorf("Open, getting the object: %w", err)
 	}

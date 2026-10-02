@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cheekybits/is"
 	"github.com/flyteorg/stow"
 	"github.com/flyteorg/stow/test"
@@ -94,15 +94,14 @@ func TestEtagCleanup(t *testing.T) {
 func TestPrepMetadataSuccess(t *testing.T) {
 	is := is.New(t)
 
-	m := make(map[string]*string)
-	m["one"] = new("two")
-	m["3"] = new("4")
-	m["ninety-nine"] = new("100")
+	m := make(map[string]string)
+	m["one"] = "two"
+	m["3"] = "4"
+	m["ninety-nine"] = "100"
 
 	m2 := make(map[string]any)
 	for key, value := range m {
-		str := *value
-		m2[key] = str
+		m2[key] = value
 	}
 
 	returnedMap, err := prepMetadata(m2)
@@ -133,6 +132,13 @@ func TestInvalidAuthtype(t *testing.T) {
 	_, err := stow.Dial("s3", config)
 	is.Err(err)
 	is.True(strings.Contains(err.Error(), "invalid auth_type"))
+}
+
+func TestEndpointURL(t *testing.T) {
+	assert.Equal(t, "https://minio:9000", endpointURL("minio:9000", false))
+	assert.Equal(t, "http://minio:9000", endpointURL("minio:9000", true))
+	assert.Equal(t, "http://minio:9000", endpointURL("http://minio:9000", false))
+	assert.Equal(t, "https://minio:9000", endpointURL("https://minio:9000", true))
 }
 
 func TestV2SigningEnabled(t *testing.T) {
@@ -217,7 +223,7 @@ func TestWillRequestRegionWhenConfigured(t *testing.T) {
 		is.NoErr(err)
 		is.Equal(awsLocationQuery.Encode(), r.URL.RawQuery)
 		b, _ := json.Marshal(s3.GetBucketLocationOutput{
-			LocationConstraint: new("whatever"),
+			LocationConstraint: "whatever",
 		})
 		w.Write(b)
 		w.WriteHeader(http.StatusOK)
