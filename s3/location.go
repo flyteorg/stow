@@ -20,6 +20,8 @@ import (
 // errBucketNotFound is returned by getBucketRegion for a bucket that does not exist.
 var errBucketNotFound = errors.New("bucket not found")
 
+var _ stow.ContextLocation = (*location)(nil)
+
 // A location contains a client + the configurations used to create the client.
 type location struct {
 	config         stow.Config
@@ -31,6 +33,11 @@ type location struct {
 // The bare minimum needed is a container name, but there are many other
 // options that can be provided.
 func (l *location) CreateContainer(containerName string) (stow.Container, error) {
+	return l.CreateContainerContext(context.Background(), containerName)
+}
+
+// CreateContainerContext is CreateContainer with a context.
+func (l *location) CreateContainerContext(ctx context.Context, containerName string) (stow.Container, error) {
 	createBucketParams := &s3.CreateBucketInput{
 		Bucket: new(containerName), // required
 	}
@@ -41,7 +48,7 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 		}
 	}
 
-	_, err := l.client.CreateBucket(context.Background(), createBucketParams)
+	_, err := l.client.CreateBucket(ctx, createBucketParams)
 	if err != nil {
 		return nil, fmt.Errorf("CreateContainer, creating the bucket: %w", err)
 	}
@@ -67,8 +74,13 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 // to start a new client for every single container where the region matches, this would
 // also check the credentials on every new instance... Tabled for later.
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
+	return l.ContainersContext(context.Background(), prefix, cursor, count)
+}
+
+// ContainersContext is Containers with a context.
+func (l *location) ContainersContext(ctx context.Context, prefix, cursor string, count int) ([]stow.Container, string, error) {
 	// Response returns exported Owner(*types.Owner) and Buckets([]types.Bucket)
-	bucketList, err := l.client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
+	bucketList, err := l.client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, "", fmt.Errorf("Containers, listing the buckets: %w", err)
 	}
@@ -113,8 +125,8 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 		client := l.client
 		bucketRegion := region
 		if !endpointSet && endpoint == "" {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			bucketRegion, err = getBucketRegion(ctx, l.client, *bucket.Name)
+			regionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			bucketRegion, err = getBucketRegion(regionCtx, l.client, *bucket.Name)
 			cancel()
 			if err != nil {
 				if errors.Is(err, errBucketNotFound) {
@@ -157,6 +169,11 @@ func (l *location) Close() error {
 // Container retrieves a stow.Container based on its name which must be
 // exact.
 func (l *location) Container(id string) (stow.Container, error) {
+	return l.ContainerContext(context.Background(), id)
+}
+
+// ContainerContext is Container with a context.
+func (l *location) ContainerContext(ctx context.Context, id string) (stow.Container, error) {
 	if id == "" {
 		return nil, errors.New("Container, the name is empty")
 	}
@@ -167,9 +184,12 @@ func (l *location) Container(id string) (stow.Container, error) {
 	// Endpoint would indicate that we are using s3-compatible storage, which
 	// does not support s3session.GetBucketRegion().
 	if endpoint, endpointSet := l.config.Config(ConfigEndpoint); !endpointSet && endpoint == "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		bucketRegion, _ = getBucketRegion(ctx, l.client, id)
+		regionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		bucketRegion, _ = getBucketRegion(regionCtx, l.client, id)
 		cancel()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 
 		var err error
 		client, _, err = newS3Client(l.config, bucketRegion)
@@ -193,7 +213,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 		Bucket: new(id),
 	}
 
-	_, err := client.GetBucketLocation(context.Background(), params)
+	_, err := client.GetBucketLocation(ctx, params)
 	if err != nil {
 		if aerr, ok := errors.AsType[smithy.APIError](err); ok && aerr.ErrorCode() == "NoSuchBucket" {
 			return nil, stow.ErrNotFound
@@ -207,11 +227,16 @@ func (l *location) Container(id string) (stow.Container, error) {
 
 // RemoveContainer removes a container simply by name.
 func (l *location) RemoveContainer(id string) error {
+	return l.RemoveContainerContext(context.Background(), id)
+}
+
+// RemoveContainerContext is RemoveContainer with a context.
+func (l *location) RemoveContainerContext(ctx context.Context, id string) error {
 	params := &s3.DeleteBucketInput{
 		Bucket: new(id),
 	}
 
-	_, err := l.client.DeleteBucket(context.Background(), params)
+	_, err := l.client.DeleteBucket(ctx, params)
 	if err != nil {
 		return fmt.Errorf("RemoveContainer, deleting the bucket: %w", err)
 	}
@@ -222,6 +247,11 @@ func (l *location) RemoveContainer(id string) error {
 // ItemByURL retrieves a stow.Item by parsing the URL, in this
 // case an item is an object.
 func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
+	return l.ItemByURLContext(context.Background(), url)
+}
+
+// ItemByURLContext is ItemByURL with a context.
+func (l *location) ItemByURLContext(ctx context.Context, url *url.URL) (stow.Item, error) {
 	if l.customEndpoint == "" {
 		genericURL := []string{"https://s3-", ".amazonaws.com/"}
 
@@ -241,13 +271,13 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 		bucketName, objectPath, _ := strings.Cut(secondCut, "/")
 
 		// Get the container by bucket name.
-		cont, err := l.Container(bucketName)
+		cont, err := l.ContainerContext(ctx, bucketName)
 		if err != nil {
 			return nil, fmt.Errorf("ItemByURL, getting container by the bucketname %s: %w", bucketName, err)
 		}
 
 		// Get the item by object name.
-		it, err := cont.Item(objectPath)
+		it, err := stow.ItemContext(ctx, cont, objectPath)
 		if err != nil {
 			return nil, fmt.Errorf("ItemByURL, getting item by object name %s: %w", objectPath, err)
 		}
@@ -260,12 +290,12 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 	containerName := url.Host
 	itemName := strings.TrimPrefix(url.Path, "/")
 
-	c, err := l.Container(containerName)
+	c, err := l.ContainerContext(ctx, containerName)
 	if err != nil {
 		return nil, fmt.Errorf("ItemByURL, getting container by the bucketname %s: %w", containerName, err)
 	}
 
-	i, err := c.Item(itemName)
+	i, err := stow.ItemContext(ctx, c, itemName)
 	if err != nil {
 		return nil, fmt.Errorf("ItemByURL, getting item by object name %s: %w", itemName, err)
 	}

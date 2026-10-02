@@ -30,7 +30,7 @@ func TestCopy(t *testing.T) {
 
 	copier, ok := dstContainer.(stow.Copier)
 	is.True(ok)
-	copied, err := copier.Copy(context.Background(), src, "other/dst.txt")
+	copied, err := copier.Copy(t.Context(), src, "other/dst.txt")
 	is.NoErr(err)
 	size, err := copied.Size()
 	is.NoErr(err)
@@ -66,12 +66,12 @@ func TestCopyErrors(t *testing.T) {
 	container := containers[1]
 	copier := container.(stow.Copier)
 
-	_, err = copier.Copy(context.Background(), nil, "dst.txt")
+	_, err = copier.Copy(t.Context(), nil, "dst.txt")
 	is.Err(err)
 
 	src, err := container.Put("src.txt", strings.NewReader("x"), 1, nil)
 	is.NoErr(err)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = copier.Copy(ctx, src, "dst.txt")
 	is.Equal(err, context.Canceled)

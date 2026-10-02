@@ -73,7 +73,7 @@ func TestStreamCopy(t *testing.T) {
 	src := &streamItem{content: "the content", metadata: map[string]any{"k": "v"}}
 	dst := &streamContainer{}
 
-	item, err := stow.StreamCopy(context.Background(), dst, src, "dir/dst")
+	item, err := stow.StreamCopy(t.Context(), dst, src, "dir/dst")
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	assert.Equal(t, "dir/dst", dst.name)
@@ -85,12 +85,12 @@ func TestStreamCopy(t *testing.T) {
 
 func TestStreamCopyErrors(t *testing.T) {
 	t.Run("nil source", func(t *testing.T) {
-		_, err := stow.StreamCopy(context.Background(), &streamContainer{}, nil, "dst")
+		_, err := stow.StreamCopy(t.Context(), &streamContainer{}, nil, "dst")
 		assert.Error(t, err)
 	})
 
 	t.Run("canceled context", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err := stow.StreamCopy(ctx, &streamContainer{}, &streamItem{}, "dst")
 		assert.ErrorIs(t, err, context.Canceled)
@@ -98,14 +98,14 @@ func TestStreamCopyErrors(t *testing.T) {
 
 	t.Run("open fails", func(t *testing.T) {
 		openErr := errors.New("open failed")
-		_, err := stow.StreamCopy(context.Background(), &streamContainer{}, &streamItem{openErr: openErr}, "dst")
+		_, err := stow.StreamCopy(t.Context(), &streamContainer{}, &streamItem{openErr: openErr}, "dst")
 		assert.ErrorIs(t, err, openErr)
 	})
 
 	t.Run("put fails", func(t *testing.T) {
 		putErr := errors.New("put failed")
 		src := &streamItem{content: "x"}
-		_, err := stow.StreamCopy(context.Background(), &streamContainer{putErr: putErr}, src, "dst")
+		_, err := stow.StreamCopy(t.Context(), &streamContainer{putErr: putErr}, src, "dst")
 		assert.ErrorIs(t, err, putErr)
 		assert.True(t, src.closed, "source was not closed")
 	})

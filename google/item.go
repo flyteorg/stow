@@ -7,6 +7,14 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/flyteorg/stow"
+)
+
+var (
+	_ stow.Item              = (*Item)(nil)
+	_ stow.ContextItem       = (*Item)(nil)
+	_ stow.ItemRanger        = (*Item)(nil)
+	_ stow.ContextItemRanger = (*Item)(nil)
 )
 
 type Item struct {
@@ -45,28 +53,53 @@ func (i *Item) URL() *url.URL {
 
 // Open returns an io.ReadCloser to the object. Useful for downloading/streaming the object.
 func (i *Item) Open() (io.ReadCloser, error) {
+	return i.OpenContext(i.ctx)
+}
+
+// OpenContext is Open with a context.
+func (i *Item) OpenContext(ctx context.Context) (io.ReadCloser, error) {
 	obj := i.container.Bucket().Object(i.name)
-	return obj.NewReader(i.ctx)
+	return obj.NewReader(ctx)
 }
 
 // OpenRange returns an io.Reader to the object for a specific byte range
 func (i *Item) OpenRange(start, end uint64) (io.ReadCloser, error) {
+	return i.OpenRangeContext(i.ctx, start, end)
+}
+
+// OpenRangeContext is OpenRange with a context.
+func (i *Item) OpenRangeContext(ctx context.Context, start, end uint64) (io.ReadCloser, error) {
 	obj := i.container.Bucket().Object(i.name)
-	return obj.NewRangeReader(i.ctx, int64(start), int64(end-start)+1)
+	return obj.NewRangeReader(ctx, int64(start), int64(end-start)+1)
 }
 
 // LastMod returns the last modified date of the item.
 func (i *Item) LastMod() (time.Time, error) {
+	return i.LastModContext(i.ctx)
+}
+
+// LastModContext is LastMod with a context.
+func (i *Item) LastModContext(_ context.Context) (time.Time, error) {
 	return i.lastModified, nil
 }
 
 // Metadata returns a nil map and no error.
 func (i *Item) Metadata() (map[string]any, error) {
+	return i.MetadataContext(i.ctx)
+}
+
+// MetadataContext is Metadata with a context.
+func (i *Item) MetadataContext(_ context.Context) (map[string]any, error) {
 	return i.metadata, nil
 }
 
 // ETag returns the ETag value
 func (i *Item) ETag() (string, error) {
+	return i.ETagContext(i.ctx)
+}
+
+// ETagContext is ETag with a context.
+func (i *Item) ETagContext(_ context.Context) (string, error) {
 	return i.etag, nil
 }
 

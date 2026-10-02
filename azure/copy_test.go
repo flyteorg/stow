@@ -33,7 +33,7 @@ func TestCopyAzurite(t *testing.T) {
 	if endpoint == "" {
 		t.Skip("skipping test because missing AZURITEENDPOINT")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cred, err := azblob.NewSharedKeyCredential(azuriteAccount, azuriteKey)
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestCopyAzurite(t *testing.T) {
 		require.NoError(t, err)
 		_, err = client.Create(ctx, nil)
 		require.NoError(t, err)
-		t.Cleanup(func() { _, _ = client.Delete(ctx, nil) })
+		t.Cleanup(func() { _, _ = client.Delete(context.WithoutCancel(ctx), nil) })
 		return &container{id: name, client: client, uploadConcurrency: defaultUploadConcurrency}
 	}
 	srcContainer, dstContainer := newContainer("stow-copy-src"), newContainer("stow-copy-dst")
@@ -141,7 +141,7 @@ func copyServer(t *testing.T, pendingChecks int32, finalStatus string) (*contain
 func TestCopyWaitsForPendingCopy(t *testing.T) {
 	dst, src, checks := copyServer(t, 2, "success")
 
-	copied, err := dst.Copy(context.Background(), src, "copied.pb")
+	copied, err := dst.Copy(t.Context(), src, "copied.pb")
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), atomic.LoadInt32(checks))
 	assert.Equal(t, "copied.pb", copied.ID())
@@ -153,7 +153,7 @@ func TestCopyWaitsForPendingCopy(t *testing.T) {
 func TestCopyFailedCopy(t *testing.T) {
 	dst, src, _ := copyServer(t, 1, "failed")
 
-	_, err := dst.Copy(context.Background(), src, "copied.pb")
+	_, err := dst.Copy(t.Context(), src, "copied.pb")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the reason")
 }
@@ -171,6 +171,6 @@ func TestAccountURL(t *testing.T) {
 }
 
 func TestCopyNilItem(t *testing.T) {
-	_, err := (&container{}).Copy(context.Background(), nil, "name")
+	_, err := (&container{}).Copy(t.Context(), nil, "name")
 	assert.Error(t, err)
 }

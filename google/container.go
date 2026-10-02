@@ -16,6 +16,11 @@ import (
 
 const googleMetadataPrefix = "x-goog-meta-"
 
+var (
+	_ stow.Container        = (*Container)(nil)
+	_ stow.ContextContainer = (*Container)(nil)
+)
+
 type Container struct {
 	// Name is needed to retrieve items.
 	name string
@@ -74,7 +79,12 @@ func (c *Container) PreSignRequest(_ context.Context, clientMethod stow.ClientMe
 // Item returns a stow.Item instance of a container based on the
 // name of the container
 func (c *Container) Item(id string) (stow.Item, error) {
-	item, err := c.Bucket().Object(id).Attrs(c.ctx)
+	return c.ItemContext(c.ctx, id)
+}
+
+// ItemContext is Item with a context.
+func (c *Container) ItemContext(ctx context.Context, id string) (stow.Item, error) {
+	item, err := c.Bucket().Object(id).Attrs(ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
 			return nil, stow.ErrNotFound
@@ -88,8 +98,13 @@ func (c *Container) Item(id string) (stow.Item, error) {
 // Items retrieves a list of items that are prepended with
 // the prefix argument. The 'cursor' variable facilitates pagination.
 func (c *Container) Items(prefix string, cursor string, count int) ([]stow.Item, string, error) {
+	return c.ItemsContext(c.ctx, prefix, cursor, count)
+}
+
+// ItemsContext is Items with a context.
+func (c *Container) ItemsContext(ctx context.Context, prefix string, cursor string, count int) ([]stow.Item, string, error) {
 	query := &storage.Query{Prefix: prefix}
-	call := c.Bucket().Objects(c.ctx, query)
+	call := c.Bucket().Objects(ctx, query)
 
 	p := iterator.NewPager(call, count, cursor)
 	var results []*storage.ObjectAttrs
@@ -113,13 +128,23 @@ func (c *Container) Items(prefix string, cursor string, count int) ([]stow.Item,
 
 // RemoveItem will delete a google storage Object
 func (c *Container) RemoveItem(id string) error {
-	return c.Bucket().Object(id).Delete(c.ctx)
+	return c.RemoveItemContext(c.ctx, id)
+}
+
+// RemoveItemContext is RemoveItem with a context.
+func (c *Container) RemoveItemContext(ctx context.Context, id string) error {
+	return c.Bucket().Object(id).Delete(ctx)
 }
 
 // Put sends a request to upload content to the container. The arguments
 // received are the name of the item, a reader representing the
 // content, and the size of the file.
 func (c *Container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
+	return c.PutContext(c.ctx, name, r, size, metadata)
+}
+
+// PutContext is Put with a context.
+func (c *Container) PutContext(ctx context.Context, name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	obj := c.Bucket().Object(name)
 
 	mdPrepped, err := prepMetadata(metadata)
@@ -127,7 +152,7 @@ func (c *Container) Put(name string, r io.Reader, size int64, metadata map[strin
 		return nil, err
 	}
 
-	w := obj.NewWriter(c.ctx)
+	w := obj.NewWriter(ctx)
 	w.ObjectAttrs.Metadata = merge(w.ObjectAttrs.Metadata, mdPrepped)
 	if _, err := io.Copy(w, r); err != nil {
 		return nil, err

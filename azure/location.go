@@ -14,6 +14,8 @@ import (
 	"github.com/flyteorg/stow"
 )
 
+var _ stow.ContextLocation = (*location)(nil)
+
 type location struct {
 	accountName       string
 	uploadConcurrency int
@@ -30,7 +32,11 @@ var publicAccessTypeContainer = azcontainer.PublicAccessTypeContainer
 // CreateContainer follows the contract from stow.Location, with one notable opinion.
 // Attempts to create an already-existing container will not produce an error.
 func (l *location) CreateContainer(name string) (stow.Container, error) {
-	ctx := context.Background()
+	return l.CreateContainerContext(context.Background(), name)
+}
+
+// CreateContainerContext is CreateContainer with a context.
+func (l *location) CreateContainerContext(ctx context.Context, name string) (stow.Container, error) {
 	resp, err := l.client.CreateContainer(
 		ctx,
 		name,
@@ -44,7 +50,7 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 		if ok &&
 			tErr.StatusCode == http.StatusConflict &&
 			tErr.ErrorCode == "ContainerAlreadyExists" {
-			return l.Container(name)
+			return l.ContainerContext(ctx, name)
 		}
 		return nil, err
 	}
@@ -62,12 +68,20 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 	// TK: What is this here for? Presumably to wait for the container to
 	// really be available. If that's the case, a validation mechanism is
 	// a much better path if you want this to always work.
-	time.Sleep(time.Second * 3)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(time.Second * 3):
+	}
 	return container, nil
 }
 
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
-	ctx := context.Background()
+	return l.ContainersContext(context.Background(), prefix, cursor, count)
+}
+
+// ContainersContext is Containers with a context.
+func (l *location) ContainersContext(ctx context.Context, prefix, cursor string, count int) ([]stow.Container, string, error) {
 	params := azblob.ListContainersOptions{
 		MaxResults: new(int32(count)),
 		Prefix:     &prefix,
@@ -100,10 +114,18 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 }
 
 func (l *location) Container(id string) (stow.Container, error) {
+	return l.ContainerContext(context.Background(), id)
+}
+
+// ContainerContext is Container with a context.
+func (l *location) ContainerContext(ctx context.Context, id string) (stow.Container, error) {
 	cursor := stow.CursorStart
 	for {
-		containers, crsr, err := l.Containers(id[:3], cursor, 100)
+		containers, crsr, err := l.ContainersContext(ctx, id[:3], cursor, 100)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			return nil, stow.ErrNotFound
 		}
 		for _, i := range containers {
@@ -122,6 +144,11 @@ func (l *location) Container(id string) (stow.Container, error) {
 }
 
 func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
+	return l.ItemByURLContext(context.Background(), url)
+}
+
+// ItemByURLContext is ItemByURL with a context.
+func (l *location) ItemByURLContext(ctx context.Context, url *url.URL) (stow.Item, error) {
 	if url.Scheme != "azure" {
 		return nil, errors.New("not valid azure URL")
 	}
@@ -136,15 +163,19 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 	if len(params) != 2 {
 		return nil, errors.New("wrong path")
 	}
-	c, err := l.Container(params[0])
+	c, err := l.ContainerContext(ctx, params[0])
 	if err != nil {
 		return nil, err
 	}
-	return c.Item(params[1])
+	return stow.ItemContext(ctx, c, params[1])
 }
 
 func (l *location) RemoveContainer(id string) error {
-	ctx := context.Background()
+	return l.RemoveContainerContext(context.Background(), id)
+}
+
+// RemoveContainerContext is RemoveContainer with a context.
+func (l *location) RemoveContainerContext(ctx context.Context, id string) error {
 	_, err := l.client.DeleteContainer(ctx, id, &azblob.DeleteContainerOptions{})
 	return err
 }
