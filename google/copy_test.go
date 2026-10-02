@@ -40,7 +40,7 @@ func TestCopyEmulator(t *testing.T) {
 	content := make([]byte, 9<<20)
 	_, err = rand.Read(content)
 	require.NoError(t, err)
-	metadata := map[string]interface{}{"stow": "copy"}
+	metadata := map[string]any{"stow": "copy"}
 	_, err = srcContainer.Put("dir/src item.pb", bytes.NewReader(content), int64(len(content)), metadata)
 	require.NoError(t, err)
 

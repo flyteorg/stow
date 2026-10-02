@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/flyteorg/stow"
 )
@@ -36,9 +35,9 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 	var etag string
 	if size <= copyObjectMaxSize {
 		res, err := c.client.CopyObjectWithContext(ctx, &s3.CopyObjectInput{
-			Bucket:     aws.String(c.name),
-			Key:        aws.String(name),
-			CopySource: aws.String(source),
+			Bucket:     new(c.name),
+			Key:        new(name),
+			CopySource: new(source),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("copy, copying the object: %w", err)
@@ -69,16 +68,16 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 // content headers are carried over explicitly.
 func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, name string, size int64) (string, error) {
 	head, err := srcItem.client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(srcItem.container.name),
-		Key:    aws.String(srcItem.ID()),
+		Bucket: new(srcItem.container.name),
+		Key:    new(srcItem.ID()),
 	})
 	if err != nil {
 		return "", fmt.Errorf("copy, getting the source object: %w", err)
 	}
 
 	upload, err := c.client.CreateMultipartUploadWithContext(ctx, &s3.CreateMultipartUploadInput{
-		Bucket:             aws.String(c.name),
-		Key:                aws.String(name),
+		Bucket:             new(c.name),
+		Key:                new(name),
 		Metadata:           head.Metadata,
 		ContentType:        head.ContentType,
 		ContentEncoding:    head.ContentEncoding,
@@ -94,8 +93,8 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		// The caller's context may be the reason for the failure, and the
 		// parts are billed until the upload is aborted.
 		_, _ = c.client.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
-			Bucket:   aws.String(c.name),
-			Key:      aws.String(name),
+			Bucket:   new(c.name),
+			Key:      new(name),
 			UploadId: upload.UploadId,
 		})
 	}
@@ -107,12 +106,12 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 			end = size - 1
 		}
 		res, err := c.client.UploadPartCopyWithContext(ctx, &s3.UploadPartCopyInput{
-			Bucket:          aws.String(c.name),
-			Key:             aws.String(name),
+			Bucket:          new(c.name),
+			Key:             new(name),
 			UploadId:        upload.UploadId,
-			PartNumber:      aws.Int64(number),
-			CopySource:      aws.String(source),
-			CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", start, end)),
+			PartNumber:      new(number),
+			CopySource:      new(source),
+			CopySourceRange: new(fmt.Sprintf("bytes=%d-%d", start, end)),
 		})
 		if err != nil {
 			abort()
@@ -124,13 +123,13 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		}
 		parts = append(parts, &s3.CompletedPart{
 			ETag:       res.CopyPartResult.ETag,
-			PartNumber: aws.Int64(number),
+			PartNumber: new(number),
 		})
 	}
 
 	res, err := c.client.CompleteMultipartUploadWithContext(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:          aws.String(c.name),
-		Key:             aws.String(name),
+		Bucket:          new(c.name),
+		Key:             new(name),
 		UploadId:        upload.UploadId,
 		MultipartUpload: &s3.CompletedMultipartUpload{Parts: parts},
 	})
