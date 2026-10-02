@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 // Kind represents the name of the location/storage type.

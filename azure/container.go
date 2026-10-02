@@ -3,18 +3,16 @@ package azure
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	azcontainer "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 // timeFormat is the time format for azure.
@@ -129,7 +127,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 	ctx := context.Background()
 	options := azcontainer.ListBlobsFlatOptions{
 		Prefix:     &prefix,
-		MaxResults: to.Ptr(int32(count)),
+		MaxResults: new(int32(count)),
 		Include:    azcontainer.ListBlobsInclude{Metadata: true},
 	}
 	if cursor != "" {
@@ -157,11 +155,11 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 	return items, *listResp.NextMarker, nil
 }
 
-func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	ctx := context.Background()
 	mdParsed, err := makeAzureCompatMetadataMap(metadata)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create or update Item, preparing metadata")
+		return nil, fmt.Errorf("unable to create or update Item, preparing metadata: %w", err)
 	}
 
 	name = strings.Replace(name, " ", "+", -1)
@@ -174,7 +172,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 			Metadata:    mdParsed,
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "file upload")
+			return nil, fmt.Errorf("file upload: %w", err)
 		}
 		blobProps.ETag = *resp.ETag
 		blobProps.LastModified = *resp.LastModified
@@ -184,7 +182,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 			Metadata:    mdParsed,
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "stream upload")
+			return nil, fmt.Errorf("stream upload: %w", err)
 		}
 		blobProps.ETag = *resp.ETag
 		blobProps.LastModified = *resp.LastModified

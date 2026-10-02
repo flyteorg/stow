@@ -85,7 +85,7 @@ func All(t *testing.T, kind string, config stow.Config) {
 	}()
 
 	// Item metadata. Keys are usually transposed differently depending on the sdk.
-	md1 := map[string]interface{}{"stowmetadata": "foo"}
+	md1 := map[string]any{"stowmetadata": "foo"}
 
 	// add three items to c1 + add metadata to one item, assert if the implementation allows.
 	// Tests metadata retrieval on PUTs.
@@ -365,7 +365,7 @@ func BigFileUpload(t *testing.T, kind string, config stow.Config, fileSize int64
 		os.Remove(f.Name())
 	}()
 	f.Truncate(fileSize)
-	item, err := testContainer.Put("test-upload-file", f, fileSize, map[string]interface{}{})
+	item, err := testContainer.Put("test-upload-file", f, fileSize, map[string]any{})
 	is.NoErr(err)
 	itemSize, err := item.Size()
 	is.NoErr(err)
@@ -414,7 +414,7 @@ func createContainer(is is.I, location stow.Location, name string) stow.Containe
 	return container
 }
 
-func putItem(is is.I, container stow.Container, name, content string, md map[string]interface{}) (stow.Item, bool) {
+func putItem(is is.I, container stow.Container, name, content string, md map[string]any) (stow.Item, bool) {
 	var skipAssertion bool // skip metadata assertion
 	item, err := container.Put(name, strings.NewReader(content), int64(len(content)), md)
 
@@ -507,7 +507,7 @@ func randName(length int) string {
 	return string(b)
 }
 
-func checkMetadata(t *testing.T, is is.I, item stow.Item, md map[string]interface{}) error {
+func checkMetadata(t *testing.T, is is.I, item stow.Item, md map[string]any) error {
 	itemMD, err := item.Metadata()
 	if err != nil {
 		is.Failf("error retrieving item metadata: %v", err)

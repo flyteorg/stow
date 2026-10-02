@@ -93,7 +93,7 @@ func TestEtagCleanup(t *testing.T) {
 func TestMetaMapRoundTrip(t *testing.T) {
 	is := is.New(t)
 
-	stowMap := make(map[string]interface{})
+	stowMap := make(map[string]any)
 	stowMap["one"] = "two"
 	stowMap["3"] = "4"
 	stowMap["ninety-nine"] = "100"
@@ -121,7 +121,7 @@ func TestMetaMapRoundTrip(t *testing.T) {
 func TestMakeAzureCompatMetadataMapFailureWithNonStringValues(t *testing.T) {
 	is := is.New(t)
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	m["float"] = 8.9
 	m["number"] = 9
 
