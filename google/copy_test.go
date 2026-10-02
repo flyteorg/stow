@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/flyteorg/stow"
@@ -74,11 +76,32 @@ func TestCopyEmulator(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, metadata, md)
 
+	t.Run("item of another client", func(t *testing.T) {
+		other, err := storage.NewClient(ctx, option.WithoutAuthentication())
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = other.Close() })
+		otherDst := &Container{name: dstContainer.name, client: other, ctx: ctx}
+
+		copied, err := otherDst.Copy(ctx, src, "dir/other-client.pb")
+		require.NoError(t, err)
+		size, err := copied.Size()
+		require.NoError(t, err)
+		assert.Equal(t, int64(len(content)), size)
+	})
+
 	t.Run("missing source", func(t *testing.T) {
 		require.NoError(t, srcContainer.RemoveItem(src.ID()))
 		_, err := dstContainer.Copy(ctx, src, "dir/missing.pb")
 		assert.Error(t, err)
 	})
+}
+
+func TestSourceUnreadable(t *testing.T) {
+	assert.True(t, sourceUnreadable(&googleapi.Error{Code: http.StatusForbidden}))
+	assert.True(t, sourceUnreadable(&googleapi.Error{Code: http.StatusNotFound}))
+	assert.True(t, sourceUnreadable(fmt.Errorf("copy: %w", storage.ErrObjectNotExist)))
+	assert.False(t, sourceUnreadable(&googleapi.Error{Code: http.StatusInternalServerError}))
+	assert.False(t, sourceUnreadable(context.Canceled))
 }
 
 func TestCopyNilItem(t *testing.T) {
