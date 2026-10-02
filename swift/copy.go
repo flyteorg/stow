@@ -22,5 +22,5 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 		return nil, fmt.Errorf("copy, copying the object: %w", err)
 	}
 
-	return c.getItem(name)
+	return c.getItem(ctx, name)
 }

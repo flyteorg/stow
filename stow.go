@@ -195,16 +195,16 @@ func StreamCopy(ctx context.Context, dst Container, src Item, name string) (Item
 	if err != nil {
 		return nil, fmt.Errorf("copy, getting the source size: %w", err)
 	}
-	metadata, err := src.Metadata()
+	metadata, err := MetadataContext(ctx, src)
 	if err != nil {
 		return nil, fmt.Errorf("copy, getting the source metadata: %w", err)
 	}
-	r, err := src.Open()
+	r, err := OpenContext(ctx, src)
 	if err != nil {
 		return nil, fmt.Errorf("copy, opening the source: %w", err)
 	}
 
-	item, err := dst.Put(name, r, size, metadata)
+	item, err := PutContext(ctx, dst, name, r, size, metadata)
 	if closeErr := r.Close(); err == nil && closeErr != nil {
 		err = fmt.Errorf("copy, closing the source: %w", closeErr)
 	}

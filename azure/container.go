@@ -26,7 +26,10 @@ type container struct {
 	uploadConcurrency int
 }
 
-var _ stow.Container = (*container)(nil)
+var (
+	_ stow.Container        = (*container)(nil)
+	_ stow.ContextContainer = (*container)(nil)
+)
 
 func (c *container) ID() string {
 	return c.id
@@ -77,8 +80,13 @@ func (c *container) PreSignRequest(ctx context.Context, method stow.ClientMethod
 }
 
 func (c *container) Item(id string) (stow.Item, error) {
+	return c.ItemContext(context.Background(), id)
+}
+
+// ItemContext is Item with a context.
+func (c *container) ItemContext(ctx context.Context, id string) (stow.Item, error) {
 	cleanedId := strings.Replace(id, " ", "+", -1)
-	items, _, err := c.Items(cleanedId, "", 1)
+	items, _, err := c.ItemsContext(ctx, cleanedId, "", 1)
 	if err != nil {
 		return nil, err
 	} else if len(items) == 0 {
@@ -124,7 +132,11 @@ func (c *container) Item(id string) (stow.Item, error) {
 }
 
 func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string, error) {
-	ctx := context.Background()
+	return c.ItemsContext(context.Background(), prefix, cursor, count)
+}
+
+// ItemsContext is Items with a context.
+func (c *container) ItemsContext(ctx context.Context, prefix, cursor string, count int) ([]stow.Item, string, error) {
 	options := azcontainer.ListBlobsFlatOptions{
 		Prefix:     &prefix,
 		MaxResults: new(int32(count)),
@@ -156,7 +168,11 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 }
 
 func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
-	ctx := context.Background()
+	return c.PutContext(context.Background(), name, r, size, metadata)
+}
+
+// PutContext is Put with a context.
+func (c *container) PutContext(ctx context.Context, name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	mdParsed, err := makeAzureCompatMetadataMap(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create or update Item, preparing metadata: %w", err)
@@ -210,7 +226,11 @@ func (c *container) SetItemMetadata(itemName string, md map[string]string) error
 }
 
 func (c *container) RemoveItem(id string) error {
-	ctx := context.Background()
+	return c.RemoveItemContext(context.Background(), id)
+}
+
+// RemoveItemContext is RemoveItem with a context.
+func (c *container) RemoveItemContext(ctx context.Context, id string) error {
 	_, err := c.client.NewBlobClient(id).Delete(ctx, nil)
 	return err
 }

@@ -28,6 +28,11 @@ type container struct {
 	customEndpoint string
 }
 
+var (
+	_ stow.Container        = (*container)(nil)
+	_ stow.ContextContainer = (*container)(nil)
+)
+
 func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.ClientMethod, id string,
 	params stow.PresignRequestParams) (response stow.PresignResponse, err error) {
 
@@ -90,12 +95,22 @@ func (c *container) Name() string {
 // retrieved item only contains metadata about the object. This ensures that only the minimum amount of information is
 // transferred. Calling item.Open() will actually do a get request and open a stream to read from.
 func (c *container) Item(id string) (stow.Item, error) {
-	return c.getItem(id)
+	return c.ItemContext(context.Background(), id)
+}
+
+// ItemContext is Item with a context.
+func (c *container) ItemContext(ctx context.Context, id string) (stow.Item, error) {
+	return c.getItem(ctx, id)
 }
 
 // Items sends a request to retrieve a list of items that are prepended with
 // the prefix argument. The 'cursor' variable facilitates pagination.
 func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string, error) {
+	return c.ItemsContext(context.Background(), prefix, cursor, count)
+}
+
+// ItemsContext is Items with a context.
+func (c *container) ItemsContext(ctx context.Context, prefix, cursor string, count int) ([]stow.Item, string, error) {
 	itemLimit := int32(count)
 
 	params := &s3.ListObjectsV2Input{
@@ -105,7 +120,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 		Prefix:     &prefix,
 	}
 
-	response, err := c.client.ListObjectsV2(context.Background(), params)
+	response, err := c.client.ListObjectsV2(ctx, params)
 	if err != nil {
 		return nil, "", fmt.Errorf("Items, listing objects: %w", err)
 	}
@@ -144,12 +159,17 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 }
 
 func (c *container) RemoveItem(id string) error {
+	return c.RemoveItemContext(context.Background(), id)
+}
+
+// RemoveItemContext is RemoveItem with a context.
+func (c *container) RemoveItemContext(ctx context.Context, id string) error {
 	params := &s3.DeleteObjectInput{
 		Bucket: new(c.Name()),
 		Key:    new(id),
 	}
 
-	_, err := c.client.DeleteObject(context.Background(), params)
+	_, err := c.client.DeleteObject(ctx, params)
 	if err != nil {
 		return fmt.Errorf("RemoveItem, deleting object %+v: %w", params, err)
 	}
@@ -161,6 +181,11 @@ func (c *container) RemoveItem(id string) error {
 // content, and the size of the file. Many more attributes can be given to the
 // file, including metadata. Keeping it simple for now.
 func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
+	return c.PutContext(context.Background(), name, r, size, metadata)
+}
+
+// PutContext is Put with a context.
+func (c *container) PutContext(ctx context.Context, name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	// Convert map[string]interface{} to map[string]string
 	mdPrepped, err := prepMetadata(metadata)
 	if err != nil {
@@ -170,7 +195,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	uploader := transfermanager.New(c.client, func(o *transfermanager.Options) {
 		o.RequestChecksumCalculation = c.client.Options().RequestChecksumCalculation
 	})
-	_, err = uploader.UploadObject(context.Background(), &transfermanager.UploadObjectInput{
+	_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
 		Bucket:   new(c.name), // Required
 		Key:      new(name),   // Required
 		Body:     r,
@@ -180,7 +205,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 	if err != nil {
 		return nil, fmt.Errorf("PutObject, putting object: %w", err)
 	}
-	i, err := c.client.HeadObject(context.Background(), &s3.HeadObjectInput{
+	i, err := c.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Key:    new(name),
 		Bucket: new(c.name),
 	})
@@ -221,13 +246,13 @@ func (c *container) Region() string {
 // done only once since the requested information is retained.
 // May be simpler to just stick it in PUT and and do a request every time, please vouch
 // for this if so.
-func (c *container) getItem(id string) (*item, error) {
+func (c *container) getItem(ctx context.Context, id string) (*item, error) {
 	params := &s3.HeadObjectInput{
 		Bucket: new(c.name),
 		Key:    new(id),
 	}
 
-	res, err := c.client.HeadObject(context.Background(), params)
+	res, err := c.client.HeadObject(ctx, params)
 	if err != nil {
 		// stow needs ErrNotFound to pass the test but amazon returns an opaque error
 		if aerr, ok := errors.AsType[smithy.APIError](err); ok && aerr.ErrorCode() == "NotFound" {

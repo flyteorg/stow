@@ -15,7 +15,10 @@ type container struct {
 	client *swift.Connection
 }
 
-var _ stow.Container = (*container)(nil)
+var (
+	_ stow.Container        = (*container)(nil)
+	_ stow.ContextContainer = (*container)(nil)
+)
 
 func (c *container) PreSignRequest(_ context.Context, _ stow.ClientMethod, _ string,
 	_ stow.PresignRequestParams) (response stow.PresignResponse, err error) {
@@ -35,18 +38,28 @@ func (c *container) Name() string {
 }
 
 func (c *container) Item(id string) (stow.Item, error) {
-	return c.getItem(id)
+	return c.ItemContext(context.Background(), id)
+}
+
+// ItemContext is Item with a context.
+func (c *container) ItemContext(ctx context.Context, id string) (stow.Item, error) {
+	return c.getItem(ctx, id)
 }
 
 // Items returns a collection of CloudStorage objects based on a matching
 // prefix string and cursor information.
 func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string, error) {
+	return c.ItemsContext(context.Background(), prefix, cursor, count)
+}
+
+// ItemsContext is Items with a context.
+func (c *container) ItemsContext(ctx context.Context, prefix, cursor string, count int) ([]stow.Item, string, error) {
 	params := &swift.ObjectsOpts{
 		Limit:  count,
 		Marker: cursor,
 		Prefix: prefix,
 	}
-	objects, err := c.client.Objects(context.Background(), c.id, params)
+	objects, err := c.client.Objects(ctx, c.id, params)
 	if err != nil {
 		return nil, "", err
 	}
@@ -72,17 +85,22 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 
 // Put creates or updates a CloudStorage object within the given container.
 func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
+	return c.PutContext(context.Background(), name, r, size, metadata)
+}
+
+// PutContext is Put with a context.
+func (c *container) PutContext(ctx context.Context, name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	mdPrepped, err := prepMetadata(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create or update Item, preparing metadata: %w", err)
 	}
 
-	_, err = c.client.ObjectPut(context.Background(), c.id, name, r, false, "", "", nil)
+	_, err = c.client.ObjectPut(ctx, c.id, name, r, false, "", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create or update Item: %w", err)
 	}
 
-	err = c.client.ObjectUpdate(context.Background(), c.id, name, mdPrepped)
+	err = c.client.ObjectUpdate(ctx, c.id, name, mdPrepped)
 	if err != nil {
 		return nil, fmt.Errorf("unable to update Item metadata: %w", err)
 	}
@@ -102,11 +120,16 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 // RemoveItem removes a CloudStorage object located within the given
 // container.
 func (c *container) RemoveItem(id string) error {
-	return c.client.ObjectDelete(context.Background(), c.id, id)
+	return c.RemoveItemContext(context.Background(), id)
 }
 
-func (c *container) getItem(id string) (*item, error) {
-	info, headers, err := c.client.Object(context.Background(), c.id, id)
+// RemoveItemContext is RemoveItem with a context.
+func (c *container) RemoveItemContext(ctx context.Context, id string) error {
+	return c.client.ObjectDelete(ctx, c.id, id)
+}
+
+func (c *container) getItem(ctx context.Context, id string) (*item, error) {
+	info, headers, err := c.client.Object(ctx, c.id, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "Object Not Found") {
 			return nil, stow.ErrNotFound
