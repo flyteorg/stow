@@ -2,22 +2,29 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/flyteorg/stow"
 )
+
+// errBucketNotFound is returned by getBucketRegion for a bucket that does not exist.
+var errBucketNotFound = errors.New("bucket not found")
 
 // A location contains a client + the configurations used to create the client.
 type location struct {
 	config         stow.Config
 	customEndpoint string
-	client         *s3.S3
+	client         *s3.Client
 }
 
 // CreateContainer creates a new container, in this case an S3 bucket.
@@ -27,8 +34,14 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 	createBucketParams := &s3.CreateBucketInput{
 		Bucket: new(containerName), // required
 	}
+	// S3 creates a bucket without a location constraint in us-east-1.
+	if clientRegion := l.client.Options().Region; clientRegion != "us-east-1" {
+		createBucketParams.CreateBucketConfiguration = &types.CreateBucketConfiguration{
+			LocationConstraint: types.BucketLocationConstraint(clientRegion),
+		}
+	}
 
-	_, err := l.client.CreateBucket(createBucketParams)
+	_, err := l.client.CreateBucket(context.Background(), createBucketParams)
 	if err != nil {
 		return nil, fmt.Errorf("CreateContainer, creating the bucket: %w", err)
 	}
@@ -54,9 +67,8 @@ func (l *location) CreateContainer(containerName string) (stow.Container, error)
 // to start a new client for every single container where the region matches, this would
 // also check the credentials on every new instance... Tabled for later.
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
-	// Response returns exported Owner(*s3.Owner) and Bucket(*s3.[]Bucket)
-	var params *s3.ListBucketsInput
-	bucketList, err := l.client.ListBuckets(params)
+	// Response returns exported Owner(*types.Owner) and Buckets([]types.Bucket)
+	bucketList, err := l.client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, "", fmt.Errorf("Containers, listing the buckets: %w", err)
 	}
@@ -102,10 +114,10 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 		bucketRegion := region
 		if !endpointSet && endpoint == "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			bucketRegion, err = s3manager.GetBucketRegionWithClient(ctx, l.client, *bucket.Name)
+			bucketRegion, err = getBucketRegion(ctx, l.client, *bucket.Name)
 			cancel()
 			if err != nil {
-				if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+				if errors.Is(err, errBucketNotFound) {
 					// sometimes buckets will still show up int eh ListBuckets results after
 					// being deleted, but will 404 when determining the region. Use this as a
 					// strong signal that the bucket has been deleted.
@@ -145,6 +157,10 @@ func (l *location) Close() error {
 // Container retrieves a stow.Container based on its name which must be
 // exact.
 func (l *location) Container(id string) (stow.Container, error) {
+	if id == "" {
+		return nil, errors.New("Container, the name is empty")
+	}
+
 	client := l.client
 	bucketRegion, bucketRegionSet := l.config.Config(ConfigRegion)
 
@@ -152,7 +168,7 @@ func (l *location) Container(id string) (stow.Container, error) {
 	// does not support s3session.GetBucketRegion().
 	if endpoint, endpointSet := l.config.Config(ConfigEndpoint); !endpointSet && endpoint == "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		bucketRegion, _ = s3manager.GetBucketRegionWithClient(ctx, l.client, id)
+		bucketRegion, _ = getBucketRegion(ctx, l.client, id)
 		cancel()
 
 		var err error
@@ -177,9 +193,9 @@ func (l *location) Container(id string) (stow.Container, error) {
 		Bucket: new(id),
 	}
 
-	_, err := client.GetBucketLocation(params)
+	_, err := client.GetBucketLocation(context.Background(), params)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NoSuchBucket" {
+		if aerr, ok := errors.AsType[smithy.APIError](err); ok && aerr.ErrorCode() == "NoSuchBucket" {
 			return nil, stow.ErrNotFound
 		}
 
@@ -195,7 +211,7 @@ func (l *location) RemoveContainer(id string) error {
 		Bucket: new(id),
 	}
 
-	_, err := l.client.DeleteBucket(params)
+	_, err := l.client.DeleteBucket(context.Background(), params)
 	if err != nil {
 		return fmt.Errorf("RemoveContainer, deleting the bucket: %w", err)
 	}
@@ -254,4 +270,29 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 		return nil, fmt.Errorf("ItemByURL, getting item by object name %s: %w", itemName, err)
 	}
 	return i, nil
+}
+
+// getBucketRegion asks S3 for the region of a bucket. S3 names it in a header
+// of every response to a HeadBucket request, even when it refuses the request.
+func getBucketRegion(ctx context.Context, client *s3.Client, bucket string) (string, error) {
+	res, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: new(bucket),
+	}, func(o *s3.Options) {
+		// The request is sent unsigned, the credentials may not be valid
+		// in the region of the client.
+		o.Credentials = nil
+	})
+	if err == nil {
+		return aws.ToString(res.BucketRegion), nil
+	}
+
+	if rerr, ok := errors.AsType[*smithyhttp.ResponseError](err); ok {
+		if region := rerr.Response.Header.Get("X-Amz-Bucket-Region"); region != "" {
+			return region, nil
+		}
+		if rerr.HTTPStatusCode() == http.StatusNotFound {
+			return "", errBucketNotFound
+		}
+	}
+	return "", err
 }

@@ -6,7 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/flyteorg/stow"
 )
 
@@ -35,7 +36,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 
 	var etag string
 	if size <= copyObjectMaxSize {
-		res, err := c.client.CopyObjectWithContext(ctx, &s3.CopyObjectInput{
+		res, err := c.client.CopyObject(ctx, &s3.CopyObjectInput{
 			Bucket:     new(c.name),
 			Key:        new(name),
 			CopySource: new(source),
@@ -68,7 +69,7 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 // upload does not inherit anything from the source, so the metadata and the
 // content headers are carried over explicitly.
 func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, name string, size int64) (string, error) {
-	head, err := srcItem.client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+	head, err := srcItem.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: new(srcItem.container.name),
 		Key:    new(srcItem.ID()),
 	})
@@ -76,7 +77,7 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 		return "", fmt.Errorf("copy, getting the source object: %w", err)
 	}
 
-	upload, err := c.client.CreateMultipartUploadWithContext(ctx, &s3.CreateMultipartUploadInput{
+	upload, err := c.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
 		Bucket:             new(c.name),
 		Key:                new(name),
 		Metadata:           head.Metadata,
@@ -93,20 +94,20 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 	abort := func() {
 		// The caller's context may be the reason for the failure, and the
 		// parts are billed until the upload is aborted.
-		_, _ = c.client.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
+		_, _ = c.client.AbortMultipartUpload(context.Background(), &s3.AbortMultipartUploadInput{
 			Bucket:   new(c.name),
 			Key:      new(name),
 			UploadId: upload.UploadId,
 		})
 	}
 
-	var parts []*s3.CompletedPart
-	for start, number := int64(0), int64(1); start < size; start, number = start+copyPartSize, number+1 {
+	var parts []types.CompletedPart
+	for start, number := int64(0), int32(1); start < size; start, number = start+copyPartSize, number+1 {
 		end := start + copyPartSize - 1
 		if end >= size {
 			end = size - 1
 		}
-		res, err := c.client.UploadPartCopyWithContext(ctx, &s3.UploadPartCopyInput{
+		res, err := c.client.UploadPartCopy(ctx, &s3.UploadPartCopyInput{
 			Bucket:          new(c.name),
 			Key:             new(name),
 			UploadId:        upload.UploadId,
@@ -122,17 +123,17 @@ func (c *container) multipartCopy(ctx context.Context, srcItem *item, source, na
 			abort()
 			return "", fmt.Errorf("copy, copying part %d: empty result", number)
 		}
-		parts = append(parts, &s3.CompletedPart{
+		parts = append(parts, types.CompletedPart{
 			ETag:       res.CopyPartResult.ETag,
 			PartNumber: new(number),
 		})
 	}
 
-	res, err := c.client.CompleteMultipartUploadWithContext(ctx, &s3.CompleteMultipartUploadInput{
+	res, err := c.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          new(c.name),
 		Key:             new(name),
 		UploadId:        upload.UploadId,
-		MultipartUpload: &s3.CompletedMultipartUpload{Parts: parts},
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
 	})
 	if err != nil {
 		abort()
@@ -155,7 +156,25 @@ func partition(c *container) string {
 	if c.client == nil {
 		return ""
 	}
-	return c.client.PartitionID
+	region := c.client.Options().Region
+	for _, p := range partitions {
+		if strings.HasPrefix(region, p.regionPrefix) {
+			return p.id
+		}
+	}
+	return "aws"
+}
+
+// partitions lists the AWS partitions other than "aws" with the prefix their
+// regions start with.
+var partitions = []struct{ regionPrefix, id string }{
+	{"cn-", "aws-cn"},
+	{"us-gov-", "aws-us-gov"},
+	{"us-iso-", "aws-iso"},
+	{"us-isob-", "aws-iso-b"},
+	{"eu-isoe-", "aws-iso-e"},
+	{"us-isof-", "aws-iso-f"},
+	{"eusc-", "aws-eusc"},
 }
 
 // copySource builds the URL-encoded "bucket/key" S3 expects as a copy source.

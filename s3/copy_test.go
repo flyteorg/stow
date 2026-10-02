@@ -117,6 +117,21 @@ func TestSameService(t *testing.T) {
 	assert.False(t, sameService(&container{customEndpoint: "http://a:9000"}, &container{customEndpoint: "http://b:9000"}))
 }
 
+func TestPartition(t *testing.T) {
+	for region, want := range map[string]string{
+		"us-east-1":      "aws",
+		"eu-central-1":   "aws",
+		"cn-north-1":     "aws-cn",
+		"us-gov-west-1":  "aws-us-gov",
+		"us-iso-east-1":  "aws-iso",
+		"us-isob-east-1": "aws-iso-b",
+	} {
+		client, _, err := newS3Client(stow.ConfigMap{ConfigAccessKeyID: "id", ConfigSecretKey: "key"}, region)
+		require.NoError(t, err)
+		assert.Equal(t, want, partition(&container{client: client}), region)
+	}
+}
+
 func TestCopyNilItem(t *testing.T) {
 	_, err := (&container{}).Copy(context.Background(), nil, "name")
 	assert.Error(t, err)
