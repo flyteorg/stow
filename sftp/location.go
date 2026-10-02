@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/flyteorg/stow"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -85,13 +84,13 @@ func (l *location) Close() error {
 
 	if l.sftpClient != nil {
 		if err := l.sftpClient.Close(); err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("closing sftp conn: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("closing sftp conn: %w", err))
 		}
 	}
 
 	if l.sshClient != nil {
 		if err := l.sshClient.Close(); err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("closing ssh conn: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("closing ssh conn: %w", err))
 		}
 	}
 
