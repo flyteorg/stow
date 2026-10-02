@@ -17,11 +17,8 @@ func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.
 	if !ok {
 		return stow.StreamCopy(ctx, c, src, name)
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
-	if _, err := c.client.ObjectCopy(srcItem.container.id, srcItem.id, c.id, name, nil); err != nil {
+	if _, err := c.client.ObjectCopy(ctx, srcItem.container.id, srcItem.id, c.id, name, nil); err != nil {
 		return nil, fmt.Errorf("copy, copying the object: %w", err)
 	}
 

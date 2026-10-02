@@ -1,12 +1,13 @@
 package swift
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
 
 	"github.com/flyteorg/stow"
-	"github.com/ncw/swift"
+	"github.com/ncw/swift/v2"
 )
 
 type location struct {
@@ -19,7 +20,7 @@ func (l *location) Close() error {
 }
 
 func (l *location) CreateContainer(name string) (stow.Container, error) {
-	err := l.client.ContainerCreate(name, nil)
+	err := l.client.ContainerCreate(context.Background(), name, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +37,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 		Prefix: prefix,
 		Marker: cursor,
 	}
-	response, err := l.client.Containers(params)
+	response, err := l.client.Containers(context.Background(), params)
 	if err != nil {
 		return nil, "", err
 	}
@@ -57,7 +58,7 @@ func (l *location) Containers(prefix, cursor string, count int) ([]stow.Containe
 }
 
 func (l *location) Container(id string) (stow.Container, error) {
-	_, _, err := l.client.Container(id)
+	_, _, err := l.client.Container(context.Background(), id)
 	// TODO: grab info + headers
 	if err != nil {
 		return nil, stow.ErrNotFound
@@ -91,5 +92,5 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 }
 
 func (l *location) RemoveContainer(id string) error {
-	return l.client.ContainerDelete(id)
+	return l.client.ContainerDelete(context.Background(), id)
 }

@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/flyteorg/stow"
-	"github.com/ncw/swift"
+	"github.com/ncw/swift/v2"
 )
 
 const (
@@ -85,7 +86,7 @@ func newSwiftClient(cfg stow.Config) (*swift.Connection, error) {
 		return nil, err
 	}
 
-	err = client.Authenticate()
+	err = client.Authenticate(context.Background())
 	if err != nil {
 		return nil, errors.New("unable to authenticate")
 	}

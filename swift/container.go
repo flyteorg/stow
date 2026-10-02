@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/flyteorg/stow"
-	"github.com/ncw/swift"
+	"github.com/ncw/swift/v2"
 )
 
 type container struct {
@@ -41,7 +41,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 		Marker: cursor,
 		Prefix: prefix,
 	}
-	objects, err := c.client.Objects(c.id, params)
+	objects, err := c.client.Objects(context.Background(), c.id, params)
 	if err != nil {
 		return nil, "", err
 	}
@@ -70,7 +70,7 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 		return nil, fmt.Errorf("unable to create or update Item, preparing metadata: %w", err)
 	}
 
-	headers, err := c.client.ObjectPut(c.id, name, r, false, "", "", mdPrepped)
+	headers, err := c.client.ObjectPut(context.Background(), c.id, name, r, false, "", "", mdPrepped)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create or update Item: %w", err)
 	}
@@ -91,11 +91,11 @@ func (c *container) Put(name string, r io.Reader, size int64, metadata map[strin
 }
 
 func (c *container) RemoveItem(id string) error {
-	return c.client.ObjectDelete(c.id, id)
+	return c.client.ObjectDelete(context.Background(), c.id, id)
 }
 
 func (c *container) getItem(id string) (*item, error) {
-	info, headers, err := c.client.Object(c.id, id)
+	info, headers, err := c.client.Object(context.Background(), c.id, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "Object Not Found") {
 			return nil, stow.ErrNotFound

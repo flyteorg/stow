@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"context"
 	"io"
 	"net/url"
 	"path"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/flyteorg/stow"
-	"github.com/ncw/swift"
+	"github.com/ncw/swift/v2"
 )
 
 type item struct {
@@ -55,7 +56,7 @@ func (i *item) Size() (int64, error) {
 // Open is a method that returns an io.ReadCloser which represents the content
 // of the CloudStorage object.
 func (i *item) Open() (io.ReadCloser, error) {
-	r, _, err := i.client.ObjectOpen(i.container.id, i.id, false, nil)
+	r, _, err := i.client.ObjectOpen(context.Background(), i.container.id, i.id, false, nil)
 	var res io.ReadCloser = r
 	// FIXME: this is a workaround to issue https://github.com/graymeta/stow/issues/120
 	if s, ok := res.(readSeekCloser); ok {
