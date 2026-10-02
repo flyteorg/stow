@@ -9,7 +9,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.4.0
 	github.com/aws/aws-sdk-go v1.44.2
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927
-	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ncw/swift v1.0.53
 	github.com/pkg/sftp v1.13.11
 	github.com/stretchr/testify v1.12.1
@@ -34,7 +33,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
