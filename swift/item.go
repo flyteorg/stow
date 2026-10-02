@@ -1,6 +1,7 @@
 package swift
 
 import (
+	"context"
 	"io"
 	"net/url"
 	"path"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/flyteorg/stow"
-	"github.com/ncw/swift"
+	"github.com/ncw/swift/v2"
 )
 
 type item struct {
@@ -51,7 +52,7 @@ func (i *item) Size() (int64, error) {
 }
 
 func (i *item) Open() (io.ReadCloser, error) {
-	r, _, err := i.client.ObjectOpen(i.container.id, i.id, false, nil)
+	r, _, err := i.client.ObjectOpen(context.Background(), i.container.id, i.id, false, nil)
 	return r, err
 }
 
