@@ -152,22 +152,22 @@ func contextCalls(ctx context.Context, l stow.Location, c stow.Container, i stow
 }
 
 func TestContextFunctionsWithoutContextMethods(t *testing.T) {
-	errs := contextCalls(context.Background(), plainLocation{}, plainContainer{}, plainItem{})
+	errs := contextCalls(t.Context(), plainLocation{}, plainContainer{}, plainItem{})
 	require.Len(t, errs, 15)
 	for name, err := range errs {
 		assert.NoError(t, err, name)
 	}
 
 	// the values come from the methods without a context
-	_, cursor, err := stow.ItemsContext(context.Background(), plainContainer{}, "", stow.CursorStart, 1)
+	_, cursor, err := stow.ItemsContext(t.Context(), plainContainer{}, "", stow.CursorStart, 1)
 	require.NoError(t, err)
 	assert.Equal(t, "next", cursor)
-	etag, err := stow.ETagContext(context.Background(), plainItem{})
+	etag, err := stow.ETagContext(t.Context(), plainItem{})
 	require.NoError(t, err)
 	assert.Equal(t, "plain", etag)
 
 	// a cancelled context stops the call
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	for name, err := range contextCalls(ctx, plainLocation{}, plainContainer{}, plainItem{}) {
 		assert.ErrorIs(t, err, context.Canceled, name)
@@ -175,7 +175,7 @@ func TestContextFunctionsWithoutContextMethods(t *testing.T) {
 }
 
 func TestContextFunctionsWithContextMethods(t *testing.T) {
-	ctx := context.WithValue(context.Background(), ctxKey{}, "value")
+	ctx := context.WithValue(t.Context(), ctxKey{}, "value")
 	l, c, i := &ctxLocation{}, &ctxContainer{}, &ctxItem{}
 
 	errs := contextCalls(ctx, l, c, i)
@@ -196,7 +196,7 @@ func TestContextFunctionsWithContextMethods(t *testing.T) {
 	assert.Equal(t, "ctx", etag)
 
 	// the context is left to the implementation
-	cancelled, cancel := context.WithCancel(context.Background())
+	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	for name, err := range contextCalls(cancelled, l, c, i) {
 		assert.NoError(t, err, name)
@@ -204,7 +204,7 @@ func TestContextFunctionsWithContextMethods(t *testing.T) {
 }
 
 func TestStreamCopyPassesContext(t *testing.T) {
-	ctx := context.WithValue(context.Background(), ctxKey{}, "value")
+	ctx := context.WithValue(t.Context(), ctxKey{}, "value")
 	src, dst := &ctxItem{}, &ctxContainer{}
 
 	_, err := stow.StreamCopy(ctx, dst, sizedItem{src}, "dst")

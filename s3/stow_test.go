@@ -2,7 +2,6 @@
 package s3
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -60,7 +59,7 @@ func TestPreSignedURL(t *testing.T) {
 	is.NoErr(err)
 
 	container, err := location.Container("flyte-demo")
-	ctx := context.Background()
+	ctx := t.Context()
 	res, err := container.PreSignRequest(ctx, stow.ClientMethodPut, "blah/bloh/fileon", stow.PresignRequestParams{
 		ExpiresIn: time.Hour,
 	})

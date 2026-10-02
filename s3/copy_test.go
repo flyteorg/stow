@@ -2,7 +2,6 @@ package s3
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"io"
 	"os"
@@ -69,7 +68,7 @@ func TestCopy(t *testing.T) {
 		src, err := srcContainer.Item("dir/src item+1.pb")
 		require.NoError(t, err)
 
-		copied, err := dstContainer.(stow.Copier).Copy(context.Background(), src, name)
+		copied, err := dstContainer.(stow.Copier).Copy(t.Context(), src, name)
 		require.NoError(t, err)
 		assert.Equal(t, name, copied.ID())
 		size, err := copied.Size()
@@ -104,7 +103,7 @@ func TestCopy(t *testing.T) {
 		src, err := srcContainer.Item("dir/src item+1.pb")
 		require.NoError(t, err)
 		require.NoError(t, srcContainer.RemoveItem(src.ID()))
-		_, err = dstContainer.(stow.Copier).Copy(context.Background(), src, "dir/missing.pb")
+		_, err = dstContainer.(stow.Copier).Copy(t.Context(), src, "dir/missing.pb")
 		assert.Error(t, err)
 	})
 }
@@ -133,7 +132,7 @@ func TestPartition(t *testing.T) {
 }
 
 func TestCopyNilItem(t *testing.T) {
-	_, err := (&container{}).Copy(context.Background(), nil, "name")
+	_, err := (&container{}).Copy(t.Context(), nil, "name")
 	assert.Error(t, err)
 }
 

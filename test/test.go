@@ -291,7 +291,7 @@ func All(t *testing.T, kind string, config stow.Config) {
 // they fail with the error of the context. They reach the implementation of
 // the location when it has methods with a context.
 func testContext(t *testing.T, is is.I, location stow.Location, container stow.Container, item stow.Item, content string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 
@@ -399,7 +399,7 @@ func ContainerPreSignRequest(
 	}()
 
 	u, err := testContainer.PreSignRequest(
-		context.Background(),
+		t.Context(),
 		stow.ClientMethodPut,
 		"presigned-put.txt",
 		stow.PresignRequestParams{
@@ -426,7 +426,7 @@ func ContainerPreSignRequest(
 	is.Equal(201, resp.StatusCode)
 
 	u, err = testContainer.PreSignRequest(
-		context.TODO(),
+		t.Context(),
 		stow.ClientMethodGet,
 		"presigned-put.txt",
 		stow.PresignRequestParams{

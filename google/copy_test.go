@@ -26,7 +26,9 @@ func TestCopyEmulator(t *testing.T) {
 	if os.Getenv("STORAGE_EMULATOR_HOST") == "" {
 		t.Skip("skipping test because missing STORAGE_EMULATOR_HOST")
 	}
-	ctx := context.Background()
+	ctx := t.Context()
+	// The context of a test is cancelled before its cleanups run.
+	cleanupCtx := context.WithoutCancel(ctx)
 
 	client, err := storage.NewClient(ctx, option.WithoutAuthentication())
 	require.NoError(t, err)
@@ -37,11 +39,11 @@ func TestCopyEmulator(t *testing.T) {
 		require.NoError(t, client.Bucket(name).Create(ctx, "stow", nil))
 		c := &Container{name: name, client: client, ctx: ctx}
 		t.Cleanup(func() {
-			items, _, _ := c.Items("", stow.CursorStart, 100)
+			items, _, _ := c.ItemsContext(cleanupCtx, "", stow.CursorStart, 100)
 			for _, i := range items {
-				_ = c.RemoveItem(i.ID())
+				_ = c.RemoveItemContext(cleanupCtx, i.ID())
 			}
-			_ = client.Bucket(name).Delete(ctx)
+			_ = client.Bucket(name).Delete(cleanupCtx)
 		})
 		return c
 	}
@@ -105,6 +107,6 @@ func TestSourceUnreadable(t *testing.T) {
 }
 
 func TestCopyNilItem(t *testing.T) {
-	_, err := (&Container{}).Copy(context.Background(), nil, "name")
+	_, err := (&Container{}).Copy(t.Context(), nil, "name")
 	assert.Error(t, err)
 }
