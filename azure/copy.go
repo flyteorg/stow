@@ -27,11 +27,11 @@ var _ stow.Copier = (*container)(nil)
 //
 // A location is bound to one storage account, so the source is always in the
 // account of the destination and the credentials of the request authorize
-// reading it.
+// reading it. An item from another kind of location is streamed instead.
 func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.Item, error) {
 	srcItem, ok := src.(*item)
 	if !ok {
-		return nil, stow.ErrCopyNotSupported
+		return stow.StreamCopy(ctx, c, src, name)
 	}
 
 	name = strings.Replace(name, " ", "+", -1)

@@ -109,9 +109,9 @@ func TestCopy(t *testing.T) {
 	})
 }
 
-func TestCopyForeignItem(t *testing.T) {
+func TestCopyNilItem(t *testing.T) {
 	_, err := (&container{}).Copy(context.Background(), nil, "name")
-	assert.Equal(t, stow.ErrCopyNotSupported, err)
+	assert.Error(t, err)
 }
 
 func randomSuffix(t *testing.T) string {

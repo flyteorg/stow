@@ -20,11 +20,12 @@ var (
 
 var _ stow.Copier = (*container)(nil)
 
-// Copy copies src into the container on the S3 side.
+// Copy copies src into the container on the S3 side. An item from another
+// kind of location is streamed instead.
 func (c *container) Copy(ctx context.Context, src stow.Item, name string) (stow.Item, error) {
 	srcItem, ok := src.(*item)
 	if !ok {
-		return nil, stow.ErrCopyNotSupported
+		return stow.StreamCopy(ctx, c, src, name)
 	}
 	size, err := srcItem.Size()
 	if err != nil {

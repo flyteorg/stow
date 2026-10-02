@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
 
-	"github.com/flyteorg/stow"
 )
 
 // TestCopyEmulator runs against a Google Cloud Storage emulator, e.g.
@@ -73,7 +72,7 @@ func TestCopyEmulator(t *testing.T) {
 	})
 }
 
-func TestCopyForeignItem(t *testing.T) {
+func TestCopyNilItem(t *testing.T) {
 	_, err := (&Container{}).Copy(context.Background(), nil, "name")
-	assert.Equal(t, stow.ErrCopyNotSupported, err)
+	assert.Error(t, err)
 }

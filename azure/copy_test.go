@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/flyteorg/stow"
 )
 
 // The account and the key every Azurite instance accepts.
@@ -160,7 +159,7 @@ func TestCopyFailedCopy(t *testing.T) {
 	assert.Contains(t, err.Error(), "the reason")
 }
 
-func TestCopyForeignItem(t *testing.T) {
+func TestCopyNilItem(t *testing.T) {
 	_, err := (&container{}).Copy(context.Background(), nil, "name")
-	assert.Equal(t, stow.ErrCopyNotSupported, err)
+	assert.Error(t, err)
 }

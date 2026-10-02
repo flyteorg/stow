@@ -9,11 +9,12 @@ import (
 var _ stow.Copier = (*Container)(nil)
 
 // Copy copies src into the container on the Google Cloud Storage side. The
-// metadata of the source object is kept.
+// metadata of the source object is kept. An item from another kind of location
+// is streamed instead.
 func (c *Container) Copy(ctx context.Context, src stow.Item, name string) (stow.Item, error) {
 	srcItem, ok := src.(*Item)
 	if !ok {
-		return nil, stow.ErrCopyNotSupported
+		return stow.StreamCopy(ctx, c, src, name)
 	}
 
 	source := c.client.Bucket(srcItem.container.name).Object(srcItem.name)
