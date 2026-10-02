@@ -1,6 +1,6 @@
 module github.com/flyteorg/stow
 
-go 1.18
+go 1.26
 
 require (
 	cloud.google.com/go/storage v1.22.0
@@ -9,7 +9,6 @@ require (
 	github.com/cheekybits/is v0.0.0-20150225183255-68e9c0620927
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ncw/swift v1.0.53
-	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.13.4
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.25.0

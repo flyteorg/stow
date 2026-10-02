@@ -1,7 +1,6 @@
 package local_test
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -13,7 +12,7 @@ import (
 func TestStow(t *testing.T) {
 	is := is.New(t)
 
-	dir, err := ioutil.TempDir("testdata", "stow")
+	dir, err := os.MkdirTemp("testdata", "stow")
 	is.NoErr(err)
 	defer os.RemoveAll(dir)
 	cfg := stow.ConfigMap{"path": dir}

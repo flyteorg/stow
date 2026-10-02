@@ -8,10 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 // The item struct contains an id (also the name of the file/S3 Object/Item),
@@ -30,7 +28,7 @@ type item struct {
 	properties properties
 	infoOnce   sync.Once
 	infoErr    error
-	tags       map[string]interface{}
+	tags       map[string]any
 	tagsOnce   sync.Once
 	tagsErr    error
 }
@@ -42,7 +40,7 @@ type properties struct {
 	Owner        *s3.Owner  `type:"structure"`
 	Size         *int64     `type:"integer"`
 	StorageClass *string    `type:"string" enum:"ObjectStorageClass"`
-	Metadata     map[string]interface{}
+	Metadata     map[string]any
 }
 
 // ID returns a string value that represents the name of a file.
@@ -84,13 +82,13 @@ func (i *item) URL() *url.URL {
 // resource which is returned along with an error.
 func (i *item) Open() (io.ReadCloser, error) {
 	params := &s3.GetObjectInput{
-		Bucket: aws.String(i.container.Name()),
-		Key:    aws.String(i.ID()),
+		Bucket: new(i.container.Name()),
+		Key:    new(i.ID()),
 	}
 
 	response, err := i.client.GetObject(params)
 	if err != nil {
-		return nil, errors.Wrap(err, "Open, getting the object")
+		return nil, fmt.Errorf("Open, getting the object: %w", err)
 	}
 	return response.Body, nil
 }
@@ -103,7 +101,7 @@ func (i *item) Open() (io.ReadCloser, error) {
 func (i *item) LastMod() (time.Time, error) {
 	err := i.ensureInfo()
 	if err != nil {
-		return time.Time{}, errors.Wrap(err, "retrieving Last Modified information of Item")
+		return time.Time{}, fmt.Errorf("retrieving Last Modified information of Item: %w", err)
 	}
 	return *i.properties.LastModified, nil
 }
@@ -113,10 +111,10 @@ func (i *item) ETag() (string, error) {
 	return *(i.properties.ETag), nil
 }
 
-func (i *item) Metadata() (map[string]interface{}, error) {
+func (i *item) Metadata() (map[string]any, error) {
 	err := i.ensureInfo()
 	if err != nil {
-		return nil, errors.Wrap(err, "retrieving metadata")
+		return nil, fmt.Errorf("retrieving metadata: %w", err)
 	}
 	return i.properties.Metadata, nil
 }
@@ -159,11 +157,11 @@ func (i *item) getInfo() (stow.Item, error) {
 }
 
 // Tags returns a map of tags on an Item
-func (i *item) Tags() (map[string]interface{}, error) {
+func (i *item) Tags() (map[string]any, error) {
 	i.tagsOnce.Do(func() {
 		params := &s3.GetObjectTaggingInput{
-			Bucket: aws.String(i.container.name),
-			Key:    aws.String(i.ID()),
+			Bucket: new(i.container.name),
+			Key:    new(i.ID()),
 		}
 
 		res, err := i.client.GetObjectTagging(params)
@@ -172,11 +170,11 @@ func (i *item) Tags() (map[string]interface{}, error) {
 				i.tagsErr = stow.ErrNotFound
 				return
 			}
-			i.tagsErr = errors.Wrap(err, "getObjectTagging")
+			i.tagsErr = fmt.Errorf("getObjectTagging: %w", err)
 			return
 		}
 
-		i.tags = make(map[string]interface{})
+		i.tags = make(map[string]any)
 		for _, t := range res.TagSet {
 			i.tags[*t.Key] = *t.Value
 		}
@@ -189,14 +187,14 @@ func (i *item) Tags() (map[string]interface{}, error) {
 // at byte end.
 func (i *item) OpenRange(start, end uint64) (io.ReadCloser, error) {
 	params := &s3.GetObjectInput{
-		Bucket: aws.String(i.container.Name()),
-		Key:    aws.String(i.ID()),
-		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", start, end)),
+		Bucket: new(i.container.Name()),
+		Key:    new(i.ID()),
+		Range:  new(fmt.Sprintf("bytes=%d-%d", start, end)),
 	}
 
 	response, err := i.client.GetObject(params)
 	if err != nil {
-		return nil, errors.Wrap(err, "Open, getting the object")
+		return nil, fmt.Errorf("Open, getting the object: %w", err)
 	}
 	return response.Body, nil
 }

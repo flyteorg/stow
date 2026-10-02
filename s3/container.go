@@ -7,14 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws/request"
-
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/flyteorg/stow"
-	"github.com/pkg/errors"
 )
 
 // Amazon S3 bucket contains a creation date and a name.
@@ -36,25 +33,25 @@ func (c *container) PreSignRequest(ctx context.Context, clientMethod stow.Client
 	switch clientMethod {
 	case stow.ClientMethodGet:
 		req, _ = c.client.GetObjectRequest(&s3.GetObjectInput{
-			Bucket: aws.String(c.name),
-			Key:    aws.String(id),
+			Bucket: new(c.name),
+			Key:    new(id),
 		})
 	case stow.ClientMethodPut:
 		var contentMD5 *string
 		if len(params.ContentMD5) > 0 {
-			contentMD5 = aws.String(params.ContentMD5)
+			contentMD5 = new(params.ContentMD5)
 		}
 
 		metadata := make(map[string]*string)
 		requestHeaders = map[string]string{"Content-Length": strconv.Itoa(len(params.ContentMD5)), "Content-MD5": params.ContentMD5}
 		if params.AddContentMD5Metadata {
-			metadata[stow.FlyteContentMD5] = aws.String(params.ContentMD5)
+			metadata[stow.FlyteContentMD5] = new(params.ContentMD5)
 			requestHeaders[fmt.Sprintf("x-amz-meta-%s", stow.FlyteContentMD5)] = params.ContentMD5
 		}
 
 		req, _ = c.client.PutObjectRequest(&s3.PutObjectInput{
-			Bucket:     aws.String(c.name),
-			Key:        aws.String(id),
+			Bucket:     new(c.name),
+			Key:        new(id),
 			ContentMD5: contentMD5,
 			Metadata:   metadata,
 		})
@@ -91,7 +88,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 	itemLimit := int64(count)
 
 	params := &s3.ListObjectsV2Input{
-		Bucket:     aws.String(c.Name()),
+		Bucket:     new(c.Name()),
 		StartAfter: &cursor,
 		MaxKeys:    &itemLimit,
 		Prefix:     &prefix,
@@ -99,7 +96,7 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 
 	response, err := c.client.ListObjectsV2(params)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "Items, listing objects")
+		return nil, "", fmt.Errorf("Items, listing objects: %w", err)
 	}
 
 	var containerItems []stow.Item
@@ -138,13 +135,13 @@ func (c *container) Items(prefix, cursor string, count int) ([]stow.Item, string
 
 func (c *container) RemoveItem(id string) error {
 	params := &s3.DeleteObjectInput{
-		Bucket: aws.String(c.Name()),
-		Key:    aws.String(id),
+		Bucket: new(c.Name()),
+		Key:    new(id),
 	}
 
 	_, err := c.client.DeleteObject(params)
 	if err != nil {
-		return errors.Wrapf(err, "RemoveItem, deleting object %+v", params)
+		return fmt.Errorf("RemoveItem, deleting object %+v: %w", params, err)
 	}
 	return nil
 }
@@ -153,27 +150,27 @@ func (c *container) RemoveItem(id string) error {
 // received are the name of the item (S3 Object), a reader representing the
 // content, and the size of the file. Many more attributes can be given to the
 // file, including metadata. Keeping it simple for now.
-func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]interface{}) (stow.Item, error) {
+func (c *container) Put(name string, r io.Reader, size int64, metadata map[string]any) (stow.Item, error) {
 	// Convert map[string]interface{} to map[string]*string
 	mdPrepped, err := prepMetadata(metadata)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create or update item, preparing metadata")
+		return nil, fmt.Errorf("unable to create or update item, preparing metadata: %w", err)
 	}
 
 	uploader := s3manager.NewUploaderWithClient(c.client)
 	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket:   aws.String(c.name), // Required
-		Key:      aws.String(name),   // Required
+		Bucket:   new(c.name), // Required
+		Key:      new(name),   // Required
 		Body:     r,
 		Metadata: mdPrepped, // map[string]*string
 	})
 
 	if err != nil {
-		return nil, errors.Wrap(err, "PutObject, putting object")
+		return nil, fmt.Errorf("PutObject, putting object: %w", err)
 	}
 	i, err := c.client.HeadObject(&s3.HeadObjectInput{
-		Key:    aws.String(name),
-		Bucket: aws.String(c.name),
+		Key:    new(name),
+		Bucket: new(c.name),
 	})
 
 	var etag string
@@ -216,8 +213,8 @@ func (c *container) Region() string {
 // for this if so.
 func (c *container) getItem(id string) (*item, error) {
 	params := &s3.HeadObjectInput{
-		Bucket: aws.String(c.name),
-		Key:    aws.String(id),
+		Bucket: new(c.name),
+		Key:    new(id),
 	}
 
 	res, err := c.client.HeadObject(params)
@@ -226,13 +223,13 @@ func (c *container) getItem(id string) (*item, error) {
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
 			return nil, stow.ErrNotFound
 		}
-		return nil, errors.Wrap(err, "getItem, getting the object")
+		return nil, fmt.Errorf("getItem, getting the object: %w", err)
 	}
 
 	etag := cleanEtag(*res.ETag) // etag string value contains quotations. Remove them.
 	md, err := parseMetadata(res.Metadata)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to retrieve Item information, parsing metadata")
+		return nil, fmt.Errorf("unable to retrieve Item information, parsing metadata: %w", err)
 	}
 
 	i := &item{
@@ -290,22 +287,22 @@ func cleanEtag(etag string) string {
 
 // prepMetadata parses a raw map into the native type required by S3 to set metadata (map[string]*string).
 // TODO: validation for key values. This function also assumes that the value of a key value pair is a string.
-func prepMetadata(md map[string]interface{}) (map[string]*string, error) {
+func prepMetadata(md map[string]any) (map[string]*string, error) {
 	m := make(map[string]*string, len(md))
 	for key, value := range md {
 		strValue, valid := value.(string)
 		if !valid {
-			return nil, errors.Errorf(`value of key '%s' in metadata must be of type string`, key)
+			return nil, fmt.Errorf(`value of key '%s' in metadata must be of type string`, key)
 		}
-		m[key] = aws.String(strValue)
+		m[key] = new(strValue)
 	}
 	return m, nil
 }
 
 // The first letter of a dash separated key value is capitalized, so perform a ToLower on it.
 // This Key transformation of returning lowercase is consistent with other locations..
-func parseMetadata(md map[string]*string) (map[string]interface{}, error) {
-	m := make(map[string]interface{}, len(md))
+func parseMetadata(md map[string]*string) (map[string]any, error) {
+	m := make(map[string]any, len(md))
 	for key, value := range md {
 		k := strings.ToLower(key)
 		m[k] = *value

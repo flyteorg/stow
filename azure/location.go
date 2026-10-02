@@ -3,16 +3,14 @@ package azure
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"net/http"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	azcontainer "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	azcontainer "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/flyteorg/stow"
 )
 
@@ -71,7 +69,7 @@ func (l *location) CreateContainer(name string) (stow.Container, error) {
 func (l *location) Containers(prefix, cursor string, count int) ([]stow.Container, string, error) {
 	ctx := context.Background()
 	params := azblob.ListContainersOptions{
-		MaxResults: to.Ptr(int32(count)),
+		MaxResults: new(int32(count)),
 		Prefix:     &prefix,
 	}
 	if cursor != stow.CursorStart {
@@ -128,7 +126,7 @@ func (l *location) ItemByURL(url *url.URL) (stow.Item, error) {
 		return nil, errors.New("not valid azure URL")
 	}
 
-	locationAccountPart := strings.Split(url.Host, ".")[0]
+	locationAccountPart, _, _ := strings.Cut(url.Host, ".")
 	if locationAccountPart != l.accountName {
 		return nil, errors.New("wrong azure URL")
 	}
