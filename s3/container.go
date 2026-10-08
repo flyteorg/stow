@@ -192,15 +192,19 @@ func (c *container) PutContext(ctx context.Context, name string, r io.Reader, si
 		return nil, fmt.Errorf("unable to create or update item, preparing metadata: %w", err)
 	}
 
-	uploader := transfermanager.New(c.client, func(o *transfermanager.Options) {
-		o.RequestChecksumCalculation = c.client.Options().RequestChecksumCalculation
-	})
-	_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
-		Bucket:   new(c.name), // Required
-		Key:      new(name),   // Required
-		Body:     r,
-		Metadata: mdPrepped, // map[string]string
-	})
+	if body, ok := r.(readerAtSeeker); ok {
+		err = c.putStreamed(ctx, name, body, mdPrepped)
+	} else {
+		uploader := transfermanager.New(c.client, func(o *transfermanager.Options) {
+			o.RequestChecksumCalculation = c.client.Options().RequestChecksumCalculation
+		})
+		_, err = uploader.UploadObject(ctx, &transfermanager.UploadObjectInput{
+			Bucket:   new(c.name), // Required
+			Key:      new(name),   // Required
+			Body:     r,
+			Metadata: mdPrepped, // map[string]string
+		})
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("PutObject, putting object: %w", err)
