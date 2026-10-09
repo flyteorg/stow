@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
@@ -177,6 +178,27 @@ func TestPutBuffersReaderWithoutOffsets(t *testing.T) {
 
 	assert.Equal(t, 1, f.puts)
 	assert.Equal(t, data, f.objects["/bucket/dir/stream"])
+}
+
+func TestPutBuffersFileThatCannotSeek(t *testing.T) {
+	f := newFakeS3(t)
+	c := fakeContainer(t, f)
+	data := content(1000)
+
+	// The read end of a pipe is an *os.File, but seeking it fails, so it is
+	// read to the end through the transfer manager.
+	pr, pw, err := os.Pipe()
+	require.NoError(t, err)
+	defer pr.Close()
+	go func() {
+		_, _ = pw.Write(data)
+		_ = pw.Close()
+	}()
+	_, err = c.Put("dir/pipe", pr, int64(len(data)), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, f.puts)
+	assert.Equal(t, data, f.objects["/bucket/dir/pipe"])
 }
 
 func TestPartSizeFor(t *testing.T) {

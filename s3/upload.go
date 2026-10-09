@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -23,8 +24,12 @@ var (
 	uploadConcurrency = 5
 )
 
-// uploadMaxParts is the most parts S3 accepts in one multipart upload.
-const uploadMaxParts = 10000
+const (
+	// uploadMaxParts is the most parts S3 accepts in one multipart upload.
+	uploadMaxParts = 10000
+	// abortTimeout bounds the abort of a failed multipart upload.
+	abortTimeout = 30 * time.Second
+)
 
 // readerAtSeeker is a body that can be read at any offset, such as an
 // *os.File, so its requests can read their bytes straight from it.
@@ -33,19 +38,15 @@ type readerAtSeeker interface {
 	io.Seeker
 }
 
-// putStreamed uploads a body that can be read at any offset without holding it
-// in memory. The transfer manager reads every body up to its multipart
-// threshold into memory, and allocates the buffers of all its parts up front
-// for a bigger one, even when the body is a file.
-func (c *container) putStreamed(ctx context.Context, name string, r readerAtSeeker, metadata map[string]string) error {
-	offset, length, err := bodyRange(r)
-	if err != nil {
-		return fmt.Errorf("put, finding the size of the body: %w", err)
-	}
+// putStreamed uploads the length bytes of r from offset, as found by
+// bodyRange, without holding them in memory. The transfer manager reads every
+// body up to its multipart threshold into memory, and allocates the buffers of
+// all its parts up front for a bigger one, even when the body is a file.
+func (c *container) putStreamed(ctx context.Context, name string, r io.ReaderAt, offset, length int64, metadata map[string]string) error {
 	if length >= multipartUploadThreshold {
 		return c.multipartUpload(ctx, name, r, offset, length, metadata)
 	}
-	_, err = c.client.PutObject(ctx, &s3.PutObjectInput{
+	_, err := c.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:            new(c.name),
 		Key:               new(name),
 		Body:              io.NewSectionReader(r, offset, length),
@@ -72,8 +73,12 @@ func (c *container) multipartUpload(ctx context.Context, name string, r io.Reade
 
 	abort := func() {
 		// The caller's context may be the reason for the failure, and the
-		// parts are billed until the upload is aborted.
-		_, _ = c.client.AbortMultipartUpload(context.Background(), &s3.AbortMultipartUploadInput{
+		// parts are billed until the upload is aborted. Keep its values, such
+		// as the trace, but not its cancellation, and bound the abort so it
+		// can't hang the failing Put.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
+		defer cancel()
+		_, _ = c.client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
 			Bucket:   new(c.name),
 			Key:      new(name),
 			UploadId: upload.UploadId,
