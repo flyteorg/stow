@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 
@@ -109,9 +108,7 @@ func makeAccountClient(cfg stow.Config) (*azblob.Client, RequestPreSigner, error
 	domainSuffix := resolveAzureDomainSuffix(cfg)
 	serviceUrl := fmt.Sprintf("https://%s.blob.%s", accountName, domainSuffix)
 	clientOptions := &azblob.ClientOptions{
-		ClientOptions: policy.ClientOptions{
-			Transport: http.DefaultClient,
-		},
+		Transport: http.DefaultClient,
 	}
 
 	key, ok := cfg.Config(ConfigKey)

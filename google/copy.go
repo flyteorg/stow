@@ -45,8 +45,7 @@ func sourceUnreadable(err error) bool {
 	if errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist) {
 		return true
 	}
-	var apiErr *googleapi.Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*googleapi.Error](err); ok {
 		return apiErr.Code == http.StatusForbidden || apiErr.Code == http.StatusNotFound
 	}
 	return false
