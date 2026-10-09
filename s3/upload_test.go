@@ -2,6 +2,7 @@ package s3
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -30,6 +31,8 @@ type fakeS3 struct {
 	puts    int // PutObject requests
 	creates int // CreateMultipartUpload requests
 	aborts  int // AbortMultipartUpload requests
+	// onPart, if set, is called with the number of each part uploaded.
+	onPart func(n int)
 }
 
 func newFakeS3(t *testing.T) *fakeS3 {
@@ -67,6 +70,9 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		n, err := strconv.Atoi(q.Get("partNumber"))
 		require.NoError(f.t, err)
 		f.parts[n] = body
+		if f.onPart != nil {
+			f.onPart(n)
+		}
 		w.Header().Set("ETag", fmt.Sprintf(`"part-%d"`, n))
 	case r.Method == http.MethodPost && q.Has("uploadId"):
 		var req completeRequest
@@ -199,6 +205,56 @@ func TestPutBuffersFileThatCannotSeek(t *testing.T) {
 
 	assert.Equal(t, 1, f.puts)
 	assert.Equal(t, data, f.objects["/bucket/dir/pipe"])
+}
+
+func TestPutBuffersLargeFileThatCannotSeek(t *testing.T) {
+	f := newFakeS3(t)
+	c := fakeContainer(t, f)
+	// Above the transfer manager's 16 MiB multipart threshold.
+	data := content(17 << 20)
+
+	pr, pw, err := os.Pipe()
+	require.NoError(t, err)
+	defer pr.Close()
+	go func() {
+		_, _ = pw.Write(data)
+		_ = pw.Close()
+	}()
+	_, err = c.Put("dir/pipe", pr, int64(len(data)), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, f.puts)
+	assert.Equal(t, 1, f.creates)
+	assert.Equal(t, 0, f.aborts)
+	assert.True(t, bytes.Equal(data, f.objects["/bucket/dir/pipe"]), "uploaded object differs")
+}
+
+func TestPutAbortsAfterCallerCancels(t *testing.T) {
+	oldThreshold, oldPart, oldConcurrency := multipartUploadThreshold, uploadPartSize, uploadConcurrency
+	multipartUploadThreshold, uploadPartSize, uploadConcurrency = 1000, 300, 1
+	defer func() {
+		multipartUploadThreshold, uploadPartSize, uploadConcurrency = oldThreshold, oldPart, oldConcurrency
+	}()
+
+	f := newFakeS3(t)
+	c := fakeContainer(t, f).(*container)
+	data := content(2000)
+
+	// The caller gives up while the parts are uploading. The upload must
+	// still be aborted, or its parts stay billed.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.onPart = func(n int) {
+		if n == 2 {
+			cancel()
+		}
+	}
+	_, err := c.PutContext(ctx, "dir/large", readAtOnly{bytes.NewReader(data)}, int64(len(data)), nil)
+	require.ErrorIs(t, err, context.Canceled)
+
+	assert.Equal(t, 1, f.creates)
+	assert.Equal(t, 1, f.aborts)
+	assert.NotContains(t, f.objects, "/bucket/dir/large")
 }
 
 func TestPartSizeFor(t *testing.T) {
