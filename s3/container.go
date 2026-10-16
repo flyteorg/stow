@@ -262,7 +262,7 @@ func (c *container) Region() string {
 // done only once since the requested information is retained.
 // May be simpler to just stick it in PUT and and do a request every time, please vouch
 // for this if so.
-func (c *container) getItem(ctx context.Context, id string) (*item, error) {
+func (c *container) headItem(ctx context.Context, id string) (*item, error) {
 	params := &s3.HeadObjectInput{
 		Bucket: new(c.name),
 		Key:    new(id),
