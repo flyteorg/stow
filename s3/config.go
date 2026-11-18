@@ -231,6 +231,12 @@ func unsignedAcceptEncoding(stack *smithymiddleware.Stack) error {
 
 		return next.HandleFinalize(ctx, in)
 	})
+	// A presigned request has no Signing step (the presigner replaces it), and signs no headers
+	// but the host: nothing to do.
+	if _, ok := stack.Finalize.Get("Signing"); !ok {
+		return nil
+	}
+
 	if err := stack.Finalize.Insert(drop, "Signing", smithymiddleware.Before); err != nil {
 		return err
 	}
