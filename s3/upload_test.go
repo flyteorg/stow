@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -265,4 +266,41 @@ func TestPartSizeFor(t *testing.T) {
 	size := partSizeFor(length)
 	assert.Greater(t, size, uploadPartSize)
 	assert.LessOrEqual(t, (length+size-1)/size, int64(uploadMaxParts))
+}
+
+// Accept-Encoding is sent but not signed: Google Cloud Storage rewrites it before checking the
+// signature, so a request that signs it fails with SignatureDoesNotMatch.
+func TestAcceptEncodingIsNotSigned(t *testing.T) {
+	f := newFakeS3(t)
+	var mu sync.Mutex
+	var sent, signed int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		if r.Header.Get("Accept-Encoding") != "" {
+			sent++
+			if strings.Contains(strings.ToLower(r.Header.Get("Authorization")), "accept-encoding") {
+				signed++
+			}
+		}
+		mu.Unlock()
+		f.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	location, err := stow.Dial(Kind, stow.ConfigMap{
+		ConfigAccessKeyID: "access-key",
+		ConfigSecretKey:   "secret-key",
+		ConfigRegion:      "us-central1",
+		ConfigEndpoint:    server.URL,
+	})
+	require.NoError(t, err)
+	c, err := location.Container("bucket")
+	require.NoError(t, err)
+
+	_, err = c.Put("probe", bytes.NewReader([]byte("probe")), 5, nil)
+	require.NoError(t, err)
+	_, err = c.Item("probe")
+	require.NoError(t, err)
+
+	assert.Positive(t, sent, "requests carry Accept-Encoding")
+	assert.Zero(t, signed, "no request signs Accept-Encoding")
 }

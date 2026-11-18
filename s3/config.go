@@ -13,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go/logging"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/flyteorg/stow"
 )
 
@@ -181,6 +183,9 @@ func newS3Client(config stow.Config, region string) (client *s3.Client, endpoint
 			// SDK otherwise adds to every request.
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			// Some (Google Cloud Storage) rewrite Accept-Encoding before they check the
+			// signature, so a signed Accept-Encoding never verifies: sign without it.
+			o.APIOptions = append(o.APIOptions, unsignedAcceptEncoding)
 		}
 		if usev2 == "true" {
 			o.HTTPSignerV4 = v2Signer{}
@@ -199,4 +204,36 @@ func endpointURL(endpoint string, disableSSL bool) string {
 		return "http://" + endpoint
 	}
 	return "https://" + endpoint
+}
+
+type acceptEncodingKey struct{}
+
+// unsignedAcceptEncoding keeps Accept-Encoding out of the request signature: it is removed before
+// signing and put back after, so it is still sent. Google Cloud Storage's S3 interoperability
+// rejects a request that signs it (SignatureDoesNotMatch), since its front end rewrites the header.
+func unsignedAcceptEncoding(stack *smithymiddleware.Stack) error {
+	drop := smithymiddleware.FinalizeMiddlewareFunc("DropAcceptEncoding", func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		if req, ok := in.Request.(*smithyhttp.Request); ok {
+			if v := req.Header.Get("Accept-Encoding"); v != "" {
+				ctx = smithymiddleware.WithStackValue(ctx, acceptEncodingKey{}, v)
+				req.Header.Del("Accept-Encoding")
+			}
+		}
+
+		return next.HandleFinalize(ctx, in)
+	})
+	restore := smithymiddleware.FinalizeMiddlewareFunc("RestoreAcceptEncoding", func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		if req, ok := in.Request.(*smithyhttp.Request); ok {
+			if v, ok := smithymiddleware.GetStackValue(ctx, acceptEncodingKey{}).(string); ok {
+				req.Header.Set("Accept-Encoding", v)
+			}
+		}
+
+		return next.HandleFinalize(ctx, in)
+	})
+	if err := stack.Finalize.Insert(drop, "Signing", smithymiddleware.Before); err != nil {
+		return err
+	}
+
+	return stack.Finalize.Insert(restore, "Signing", smithymiddleware.After)
 }
